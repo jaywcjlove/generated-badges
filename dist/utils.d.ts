@@ -10,3 +10,6 @@ export interface BadgenOptions {
     iconWidth?: number;
     scale?: number;
 }
+export declare const colors: Record<string, string>;
+export declare const useColor: (svgString: string, color: string) => string;
+export declare const addGradient: (svgString: string, gradient: string[], id: string) => string;

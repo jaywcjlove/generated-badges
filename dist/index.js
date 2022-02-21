@@ -1633,6 +1633,7 @@ exports.getInputs = void 0;
 const path_1 = __importDefault(__nccwpck_require__(17));
 const fs_1 = __importDefault(__nccwpck_require__(147));
 const badgen_1 = __nccwpck_require__(893);
+const utils_1 = __nccwpck_require__(314);
 const core_1 = __nccwpck_require__(186);
 function getInputs() {
     const label = (0, core_1.getInput)('label') || ':label';
@@ -1650,12 +1651,16 @@ try {
     ;
     (async () => {
         const options = getInputs();
+        const gradient = (0, core_1.getInput)('gradient');
         const output = (0, core_1.getInput)('output') || 'BADGES.svg';
         const svgPath = path_1.default.resolve(process.cwd(), output);
         (0, core_1.startGroup)(`Inputs: `);
         (0, core_1.info)(`${JSON.stringify(options, null, 2)}`);
         (0, core_1.endGroup)();
-        const svgString = (0, badgen_1.badgen)(Object.assign({}, options));
+        let svgString = (0, badgen_1.badgen)(Object.assign({}, options));
+        if (Array.isArray(gradient) && gradient.length > 0) {
+            svgString = (0, utils_1.useColor)((0, utils_1.addGradient)(svgString, gradient, 'x'), 'url(#x)');
+        }
         (0, core_1.startGroup)(`Svg String: \x1b[34m(${svgPath})\x1b[0m`);
         (0, core_1.info)(`${svgString}`);
         (0, core_1.endGroup)();
@@ -1668,6 +1673,47 @@ try {
 catch (error) {
     (0, core_1.setFailed)(error.message);
 }
+
+
+/***/ }),
+
+/***/ 314:
+/***/ ((__unused_webpack_module, exports) => {
+
+"use strict";
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.addGradient = exports.useColor = exports.colors = void 0;
+exports.colors = {
+    green: '3C1',
+    blue: '08C',
+    red: 'E43',
+    yellow: 'DB1',
+    orange: 'F73',
+    purple: '94E',
+    pink: 'E5B',
+    grey: '999',
+    gray: '999',
+    cyan: '1BC',
+    black: '2A2A2A',
+};
+const useColor = (svgString, color) => {
+    return svgString.replace(/(<g.+\n\s+<rect.+\n\s+<rect.+fill=")([^"]+)(")/g, `$1${color}$3`);
+};
+exports.useColor = useColor;
+const addGradient = (svgString, gradient, id) => {
+    let svgGradient = '  <linearGradient id="' + id + '" x1="0%" y1="0%" x2="100%" y2="0%">';
+    for (let i = 0; i < gradient.length; i++) {
+        const offset = Math.round((100 * i) / (gradient.length - 1));
+        const color = exports.colors[gradient[i]] || gradient[i];
+        svgGradient += `\n    <stop offset="${offset}%" style="stop-color:#${color}" />`;
+    }
+    svgGradient += '\n  </linearGradient>\n</svg>';
+    return svgString
+        .replace('</svg>', svgGradient)
+        .replace(/(<g.+\n\s+<rect.+\n\s+<rect.+fill=")([^"]+)(")/g, '$1url(#x)$3');
+};
+exports.addGradient = addGradient;
 
 
 /***/ }),
