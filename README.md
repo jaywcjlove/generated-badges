@@ -1,12 +1,15 @@
 Generated Badges
 ===
 
+[![Build & Deploy](https://github.com/jaywcjlove/generated-badges/actions/workflows/ci.yml/badge.svg)](https://github.com/jaywcjlove/generated-badges/actions/workflows/ci.yml)
+[![npm version](https://img.shields.io/npm/v/generated-badges.svg)](https://www.npmjs.com/package/generated-badges)
+
 Create a badge using GitHub Actions and GitHub Workflow CPU time (no 3rd parties servers)
 
 ## Install
 
 ```shell
-$ npm i generated-badge -g
+$ npm i generated-badges -g
 ```
 
 ## Command Help
@@ -50,6 +53,18 @@ Example:
     github_token: xxxxxxx
     publish_dir: ./build
 ```
+
+Available color names:
+
+![blue badges](https://jaywcjlove.github.io/generated-badges/blue.svg)
+![cyan badges](https://jaywcjlove.github.io/generated-badges/cyan.svg)
+![green badges](https://jaywcjlove.github.io/generated-badges/green.svg)
+![yellow badges](https://jaywcjlove.github.io/generated-badges/yellow.svg)
+![red badges](https://jaywcjlove.github.io/generated-badges/red.svg)
+![pink badges](https://jaywcjlove.github.io/generated-badges/pink.svg)
+![purple badges](https://jaywcjlove.github.io/generated-badges/purple.svg)
+![grey badges](https://jaywcjlove.github.io/generated-badges/grey.svg)
+![black badges](https://jaywcjlove.github.io/generated-badges/black.svg)
 
 ### Input Parameters
 
