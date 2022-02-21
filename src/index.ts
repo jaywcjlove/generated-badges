@@ -19,9 +19,10 @@ export function getInputs(): BadgenOptions {
 try {
   ;(async () => {
     const options = getInputs();
-    const gradient = getInput('gradient');
+    const gradientStr = getInput('gradient');
     const output = getInput('output') || 'BADGES.svg';
     const svgPath = path.resolve(process.cwd(), output);
+    const gradient = gradientStr.split(',').filter(Boolean);
     startGroup(`Inputs: `);
     info(`gradient: ${Array.isArray(gradient)}, ${gradient}`);
     info(`${JSON.stringify(options, null, 2)}`);

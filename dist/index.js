@@ -1651,9 +1651,10 @@ try {
     ;
     (async () => {
         const options = getInputs();
-        const gradient = (0, core_1.getInput)('gradient');
+        const gradientStr = (0, core_1.getInput)('gradient');
         const output = (0, core_1.getInput)('output') || 'BADGES.svg';
         const svgPath = path_1.default.resolve(process.cwd(), output);
+        const gradient = gradientStr.split(',').filter(Boolean);
         (0, core_1.startGroup)(`Inputs: `);
         (0, core_1.info)(`gradient: ${Array.isArray(gradient)}, ${gradient}`);
         (0, core_1.info)(`${JSON.stringify(options, null, 2)}`);

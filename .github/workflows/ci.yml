@@ -92,9 +92,7 @@ jobs:
         with:
           label: color
           status: black
-          gradient: |
-            pink
-            F78642
+          gradient: pink,F78642
           output: build/gradient.svg
 
       - name: Generate Contributors Images
