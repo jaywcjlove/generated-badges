@@ -1655,6 +1655,7 @@ try {
         const output = (0, core_1.getInput)('output') || 'BADGES.svg';
         const svgPath = path_1.default.resolve(process.cwd(), output);
         (0, core_1.startGroup)(`Inputs: `);
+        (0, core_1.info)(`gradient: ${Array.isArray(gradient)}, ${gradient}`);
         (0, core_1.info)(`${JSON.stringify(options, null, 2)}`);
         (0, core_1.endGroup)();
         let svgString = (0, badgen_1.badgen)(Object.assign({}, options));
