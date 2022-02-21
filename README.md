@@ -85,6 +85,16 @@ Available color names:
 - [github-action-contributors](https://github.com/jaywcjlove/github-action-contributors) Github action generates dynamic image URL for contributor list to display it!.
 - [coverage-badges-cli](https://github.com/jaywcjlove/coverage-badges-cli) Create coverage badges from coverage reports.
 
+## Contributors
+
+As always, thanks to our amazing contributors!
+
+<a href="https://github.com/jaywcjlove/generated-badges/graphs/contributors">
+  <img src="https://jaywcjlove.github.io/generated-badges/CONTRIBUTORS.svg" />
+</a>
+
+Made with [github-action-contributors](https://github.com/jaywcjlove/github-action-contributors).
+
 ## License
 
 Licensed under the MIT License.
