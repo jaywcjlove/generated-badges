@@ -29,6 +29,7 @@ jobs:
         with:
           label: color
           status: cyan
+          color: cyan
           output: build/cyan.svg
 
       - name: Generate green badges
