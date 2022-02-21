@@ -1,0 +1,18 @@
+<svg width="89.7" height="20" viewBox="0 0 897 200" xmlns="http://www.w3.org/2000/svg" role="img" aria-label=":label: :status">
+  <title>:label: :status</title>
+  <g>
+    <rect fill="#555" width="411" height="200"/>
+    <rect fill="url(#x)" x="411" width="486" height="200"/>
+  </g>
+  <g aria-hidden="true" fill="#fff" text-anchor="start" font-family="Verdana,DejaVu Sans,sans-serif" font-size="110">
+    <text x="60" y="148" textLength="311" fill="#000" opacity="0.1">:label</text>
+    <text x="50" y="138" textLength="311">:label</text>
+    <text x="466" y="148" textLength="386" fill="#000" opacity="0.1">:status</text>
+    <text x="456" y="138" textLength="386">:status</text>
+  </g>
+  
+  <linearGradient id="x" x1="0%" y1="0%" x2="100%" y2="0%">
+    <stop offset="0%" style="stop-color:#E5B" />
+    <stop offset="100%" style="stop-color:#F78642" />
+  </linearGradient>
+</svg>

@@ -87,6 +87,14 @@ jobs:
           color: black
           output: build/black.svg
 
+      - name: Generate gradient badges
+        uses: ./
+        with:
+          label: color
+          status: black
+          gradient: ['pink', 'F78642']
+          output: build/gradient.svg
+
       - name: Generate Contributors Images
         uses: jaywcjlove/github-action-contributors@main
         with:

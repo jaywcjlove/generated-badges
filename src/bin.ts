@@ -2,7 +2,7 @@
 
 import path from 'path';
 import minimist, { ParsedArgs } from 'minimist';
-import { BadgenOptions } from './utils';
+import { BadgenOptions, addGradient, useColor } from './utils';
 import { badgen } from 'badgen';
 import FS from 'fs-extra';
 
@@ -17,6 +17,7 @@ function run() {
   const argvs: RunArgvs = minimist(process.argv.slice(2), {
     alias: {
       label: 'l',
+      gradient: 'g',
       status: 's',
       color: 'c',
       output: 'o',
@@ -53,7 +54,7 @@ function run() {
     return;
   }
 
-  const svgString = badgen({
+  let svgString = badgen({
     label: argvs.label,
     labelColor: argvs.labelColor,
     status: argvs.status,
@@ -69,6 +70,9 @@ function run() {
     // iconWidth: 13,     // Set this if icon is not square (default: 13)
     // scale: 1           // Set badge scale (default: 1)
   });
+  if (Array.isArray(argvs.gradient) && argvs.gradient.length > 0) {
+    svgString = useColor(addGradient(svgString, argvs.gradient, 'x'), 'url(#x)')
+  }
 
   FS.writeFileSync(svgPath, svgString);
   console.log(`\nCoverage Badges: \x1b[32;1m${path.relative(process.cwd(), svgPath)}\x1b[0m\n`);
@@ -88,9 +92,11 @@ export function cliHelp() {
   console.log('    --status, -s   ', 'Override default status text.');
   console.log('    --scale        ', 'Set badge scale (default: 1).');
   console.log('    --color, -c    ', `<Color RGB> or <Color Name> (default: 'blue').'`);
+  console.log('    --gradient, -g ', `Adding a gradient to a badge.'`);
   console.log('\n  Example:\n');
   console.log('    \x1b[35mgenerated-badges\x1b[0m \x1b[33m--output\x1b[0m coverage/badges.svg');
   console.log('    \x1b[35mgenerated-badges\x1b[0m \x1b[33m--style\x1b[0m classic');
   console.log('    \x1b[35mgenerated-badges\x1b[0m \x1b[33m--color\x1b[0m red');
+  console.log('    \x1b[35mgenerated-badges\x1b[0m \x1b[33m--gradient\x1b[0m c05cff \x1b[33m--gradient\x1b[0m fa5b37');
   console.log('\n');
 }

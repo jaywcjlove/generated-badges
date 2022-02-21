@@ -27,14 +27,18 @@ inputs:
     default: '555'
     required: false
 
+  scale:
+    description: Set badge scale.
+    default: 1
+    required: false
+
   output:
     description: Output image path.
     default: BADGES.svg
     required: false
 
-  scale:
-    description: Set badge scale.
-    default: 1
+  gradient:
+    description: Adding a gradient to a badge.
     required: false
 
 outputs:

@@ -1,7 +1,7 @@
 import path from 'path';
 import fs from 'fs';
 import { badgen } from 'badgen';
-import { BadgenOptions, StyleOption } from './utils';
+import { BadgenOptions, StyleOption, addGradient, useColor } from './utils';
 import { setFailed, setOutput, getInput, info, startGroup, endGroup } from '@actions/core';
 
 export function getInputs(): BadgenOptions {
@@ -19,16 +19,24 @@ export function getInputs(): BadgenOptions {
 try {
   ;(async () => {
     const options = getInputs();
+    const gradient = getInput('gradient');
     const output = getInput('output') || 'BADGES.svg';
     const svgPath = path.resolve(process.cwd(), output);
     startGroup(`Inputs: `);
     info(`${JSON.stringify(options, null, 2)}`);
     endGroup();
-    const svgString = badgen({ ...options });
+
+    let svgString = badgen({ ...options });
+    if (Array.isArray(gradient) && gradient.length > 0) {
+      svgString = useColor(addGradient(svgString, gradient, 'x'), 'url(#x)')
+    }
+
     startGroup(`Svg String: \x1b[34m(${svgPath})\x1b[0m`);
     info(`${svgString}`);
     endGroup();
+
     setOutput('svg', svgString)
+
     const data = new Uint8Array(Buffer.from(svgString));
     await fs.promises.writeFile(svgPath, data);
     info(`Generated: "${svgPath}"`)

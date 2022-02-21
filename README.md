@@ -15,24 +15,27 @@ $ npm i generated-badges -g
 ## Command Help
 
 ```bash
-Usage: coverage-badges [options] [--help|h]
+Usage: generated-badges [options] [--help|h]
 
 Options:
 
-  --version, -v      Show version number.
-  --help, -h         Displays help information.
-  --output, -o       Output svg image path.
-  --style            Badges style: flat, flat-square.
-  --label, -l        The left label of the badge, usually static.
-  --labelColor       Hex or named color for the label. Default: 555
-  --status, -s       Override default status text.
-  --color, -c        <Color RGB> or <Color Name> (default: 'blue').'
+  --version, -v   Show version number.
+  --help, -h      Displays help information.
+  --output, -o    Output svg image path.
+  --label, -l     The left label of the badge, usually static.
+  --labelColor    <Color RGB> or <Color Name> (default: '555')
+  --style         Badges style: flat, classic.
+  --status, -s    Override default status text.
+  --scale         Set badge scale (default: 1).
+  --color, -c     <Color RGB> or <Color Name> (default: 'blue').'
+  --gradient, -g  Adding a gradient to a badge.'
 
 Example:
 
-  npm generated-badges --output coverage/badges.svg
-  npm generated-badges --style flat-square
-  npm generated-badges --color red
+  generated-badges --output coverage/badges.svg
+  generated-badges --style classic
+  generated-badges --color red
+  generated-badges --gradient c05cff --gradient fa5b37
 ```
 
 ## Github Actions
@@ -65,16 +68,18 @@ Available color names:
 ![purple badges](https://jaywcjlove.github.io/generated-badges/purple.svg)
 ![grey badges](https://jaywcjlove.github.io/generated-badges/grey.svg)
 ![black badges](https://jaywcjlove.github.io/generated-badges/black.svg)
+![gradient badges](https://jaywcjlove.github.io/generated-badges/gradient.svg)
 
 ### Input Parameters
 
-- `label` description: The left label of the badge, usually static. (default `:label`)
-- `status` description: The right status as the badge, usually based on results. (default `:status`)
-- `style` description: 'Badges style: flat, classic.' (default `classic`)
-- `color` description: An array (comma separated) with hex or named colors of the badge value background. (default `blue`)
-- `labelColor` description: Hex or named color for the label. (default `555`)
-- `output` description: Output image path. (default `BADGES.svg`)
-- `scale` description: Set badge scale. (default `1`)
+- `label` - The left label of the badge, usually static. (default `:label`)
+- `status` - The right status as the badge, usually based on results. (default `:status`)
+- `style` - Badges style: `flat`, `classic`. (default `classic`)
+- `color` - An array (comma separated) with hex or named colors of the badge value background. (default `blue`)
+- `labelColor` - Hex or named color for the label. (default `555`)
+- `output` - Output image path. (default `BADGES.svg`)
+- `scale` - Set badge scale. (default `1`)
+- `gradient` - Adding a gradient to a badge. (example `['c05cff', 'fa5b37']`)
 
 ### Output Parameters
 
