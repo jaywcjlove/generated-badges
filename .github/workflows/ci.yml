@@ -36,6 +36,7 @@ jobs:
         with:
           label: color
           status: green
+          color: green
           output: build/green.svg
 
       - name: Generate yellow badges
@@ -43,6 +44,7 @@ jobs:
         with:
           label: color
           status: yellow
+          color: yellow
           output: build/yellow.svg
 
       - name: Generate red badges
@@ -50,6 +52,7 @@ jobs:
         with:
           label: color
           status: red
+          color: red
           output: build/red.svg
 
       - name: Generate pink badges
@@ -57,6 +60,7 @@ jobs:
         with:
           label: color
           status: pink
+          color: pink
           output: build/pink.svg
 
       - name: Generate purple badges
@@ -64,6 +68,7 @@ jobs:
         with:
           label: color
           status: purple
+          color: purple
           output: build/purple.svg
 
       - name: Generate grey badges
@@ -71,6 +76,7 @@ jobs:
         with:
           label: color
           status: grey
+          color: grey
           output: build/grey.svg
 
       - name: Generate black badges
@@ -78,6 +84,7 @@ jobs:
         with:
           label: color
           status: black
+          color: black
           output: build/black.svg
 
       - name: Deploy
