@@ -133,3 +133,6 @@ jobs:
             ![purple badges](https://jaywcjlove.github.io/generated-badges/purple.svg)
             ![grey badges](https://jaywcjlove.github.io/generated-badges/grey.svg)
             ![black badges](https://jaywcjlove.github.io/generated-badges/black.svg)
+
+      - run: npm install @jsdevtools/npm-publish -g
+      - run: npm-publish --token="${{ secrets.NPM_TOKEN }}" ./core/package.json
