@@ -1,0 +1,135 @@
+name: Build & Deploy
+on: [push]
+
+jobs:
+  test:
+    runs-on: ubuntu-18.04
+    steps:
+      - uses: actions/checkout@v2
+      - uses: actions/setup-node@v2
+        with:
+          node-version: 14
+
+
+      - run: npm install
+      - run: mkdir -rp build
+      - run: npm i markdown-to-html-cli -g
+      - run: markdown-to-html --output build/index.html --favicon 'data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🏞️</text></svg>'
+
+      - name: Generate blue badges
+        # uses: jaywcjlove/generated-badges@main
+        uses: ./
+        with:
+          label: color
+          status: blue
+          output: build/blue.svg
+
+      - name: Generate cyan badges
+        uses: ./
+        with:
+          label: color
+          status: cyan
+          output: build/cyan.svg
+
+      - name: Generate green badges
+        uses: ./
+        with:
+          label: color
+          status: green
+          output: build/green.svg
+
+      - name: Generate yellow badges
+        uses: ./
+        with:
+          label: color
+          status: yellow
+          output: build/yellow.svg
+
+      - name: Generate red badges
+        uses: ./
+        with:
+          label: color
+          status: red
+          output: build/red.svg
+
+      - name: Generate pink badges
+        uses: ./
+        with:
+          label: color
+          status: pink
+          output: build/pink.svg
+
+      - name: Generate purple badges
+        uses: ./
+        with:
+          label: color
+          status: purple
+          output: build/purple.svg
+
+      - name: Generate grey badges
+        uses: ./
+        with:
+          label: color
+          status: grey
+          output: build/grey.svg
+
+      - name: Generate black badges
+        uses: ./
+        with:
+          label: color
+          status: black
+          output: build/black.svg
+
+      - name: Create Tag
+        id: create_tag
+        uses: jaywcjlove/create-tag-action@v1.3.5
+        with:
+          package-path: ./package.json
+
+      - name: Generate Changelog
+        id: changelog
+        uses: jaywcjlove/changelog-generator@v1.4.8
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          head-ref: ${{steps.create_tag.outputs.version}}
+          filter-author: (小弟调调™|Renovate Bot)
+          filter: '[R|r]elease[d]\s+[v|V]\d(\.\d+){0,2}'
+
+      - name: Create Release
+        uses: ncipollo/release-action@v1
+        if: steps.create_tag.outputs.successful
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          name: ${{ steps.create_tag.outputs.version }}
+          tag: ${{ steps.create_tag.outputs.version }}
+          body: |
+            ${{ steps.changelog.outputs.compareurl }}
+            
+            ${{ steps.changelog.outputs.changelog }}
+
+            ```yml
+            - run: mkdir -p build
+
+            - name: Generate Badges
+              uses: jaywcjlove/generated-badges@main
+              with:
+                label: color
+                status: cyan
+                output: build/cyan.svg
+
+            - name: Deploy
+              uses: peaceiris/actions-gh-pages@v3
+              with:
+                github_token: xxxxxxx
+                publish_dir: ./build
+            ```
+
+            ![blue badges](https://jaywcjlove.github.io/generated-badges/blue.svg)
+            ![cyan badges](https://jaywcjlove.github.io/generated-badges/cyan.svg)
+            ![green badges](https://jaywcjlove.github.io/generated-badges/green.svg)
+            ![yellow badges](https://jaywcjlove.github.io/generated-badges/yellow.svg)
+            ![red badges](https://jaywcjlove.github.io/generated-badges/red.svg)
+            ![pink badges](https://jaywcjlove.github.io/generated-badges/pink.svg)
+            ![purple badges](https://jaywcjlove.github.io/generated-badges/purple.svg)
+            ![grey badges](https://jaywcjlove.github.io/generated-badges/grey.svg)
+            ![black badges](https://jaywcjlove.github.io/generated-badges/black.svg)
