@@ -89,8 +89,8 @@ export function cliHelp() {
   console.log('    --scale        ', 'Set badge scale (default: 1).');
   console.log('    --color, -c    ', `<Color RGB> or <Color Name> (default: 'blue').'`);
   console.log('\n  Example:\n');
-  console.log('    \x1b[35mnpm\x1b[0m generated-badges \x1b[33m--output\x1b[0m coverage/badges.svg');
-  console.log('    \x1b[35mnpm\x1b[0m generated-badges \x1b[33m--style\x1b[0m flat-square');
-  console.log('    \x1b[35mnpm\x1b[0m generated-badges \x1b[33m--color\x1b[0m red');
+  console.log('    \x1b[35mgenerated-badges\x1b[0m \x1b[33m--output\x1b[0m coverage/badges.svg');
+  console.log('    \x1b[35mgenerated-badges\x1b[0m \x1b[33m--style\x1b[0m flat-square');
+  console.log('    \x1b[35mgenerated-badges\x1b[0m \x1b[33m--color\x1b[0m red');
   console.log('\n');
 }
