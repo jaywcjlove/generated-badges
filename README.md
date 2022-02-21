@@ -65,6 +65,10 @@ Example:
 
 - `svg` svg image string: `<svg xmlns....`.
 
+## Related
+
+- [Generated Badges](https://github.com/jaywcjlove/generated-badges) Create a badge using GitHub Actions and GitHub Workflow CPU time (no 3rd parties servers)
+
 ## License
 
 Licensed under the MIT License.
