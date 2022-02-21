@@ -23,6 +23,7 @@ try {
     const output = getInput('output') || 'BADGES.svg';
     const svgPath = path.resolve(process.cwd(), output);
     startGroup(`Inputs: `);
+    info(`gradient: ${Array.isArray(gradient)}, ${gradient}`);
     info(`${JSON.stringify(options, null, 2)}`);
     endGroup();
 
