@@ -26,42 +26,48 @@
 </code><div onclick="copied(this)" data-code="$ npm i generated-badges -g
 " class="copied"><svg class="octicon-copy" aria-hidden="true" viewBox="0 0 16 16" fill="currentColor" height="12" width="12"><path fill-rule="evenodd" d="M0 6.75C0 5.784.784 5 1.75 5h1.5a.75.75 0 010 1.5h-1.5a.25.25 0 00-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 00.25-.25v-1.5a.75.75 0 011.5 0v1.5A1.75 1.75 0 019.25 16h-7.5A1.75 1.75 0 010 14.25v-7.5z"></path><path fill-rule="evenodd" d="M5 1.75C5 .784 5.784 0 6.75 0h7.5C15.216 0 16 .784 16 1.75v7.5A1.75 1.75 0 0114.25 11h-7.5A1.75 1.75 0 015 9.25v-7.5zm1.75-.25a.25.25 0 00-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 00.25-.25v-7.5a.25.25 0 00-.25-.25h-7.5z"></path></svg><svg class="octicon-check" aria-hidden="true" viewBox="0 0 16 16" fill="currentColor" height="12" width="12"><path fill-rule="evenodd" d="M13.78 4.22a.75.75 0 010 1.06l-7.25 7.25a.75.75 0 01-1.06 0L2.22 9.28a.75.75 0 011.06-1.06L6 10.94l6.72-6.72a.75.75 0 011.06 0z"></path></svg></div></pre>
       <h2 id="command-help"><a class="anchor" aria-hidden="true" tabindex="-1" href="#command-help"><span class="octicon octicon-link"></span></a>Command Help</h2>
-      <pre class="language-bash"><code class="language-bash">Usage: coverage-badges <span class="token punctuation">[</span>options<span class="token punctuation">]</span> <span class="token punctuation">[</span>--help<span class="token operator">|</span>h<span class="token punctuation">]</span>
+      <pre class="language-bash"><code class="language-bash">Usage: generated-badges <span class="token punctuation">[</span>options<span class="token punctuation">]</span> <span class="token punctuation">[</span>--help<span class="token operator">|</span>h<span class="token punctuation">]</span>
 
 Options:
 
-  --version, -v      Show version number.
-  --help, -h         Displays <span class="token builtin class-name">help</span> information.
-  --output, -o       Output svg image path.
-  --style            Badges style: flat, flat-square.
-  --label, -l        The left label of the badge, usually static.
-  --labelColor       Hex or named color <span class="token keyword">for</span> the label. Default: <span class="token number">555</span>
-  --status, -s       Override default status text.
-  --color, -c        <span class="token operator">&#x3C;</span>Color RGB<span class="token operator">></span> or <span class="token operator">&#x3C;</span>Color Name<span class="token operator">></span> <span class="token punctuation">(</span>default: <span class="token string">'blue'</span><span class="token punctuation">)</span>.'
+  --version, -v   Show version number.
+  --help, -h      Displays <span class="token builtin class-name">help</span> information.
+  --output, -o    Output svg image path.
+  --label, -l     The left label of the badge, usually static.
+  --labelColor    <span class="token operator">&#x3C;</span>Color RGB<span class="token operator">></span> or <span class="token operator">&#x3C;</span>Color Name<span class="token operator">></span> <span class="token punctuation">(</span>default: <span class="token string">'555'</span><span class="token punctuation">)</span>
+  --style         Badges style: flat, classic.
+  --status, -s    Override default status text.
+  --scale         Set badge scale <span class="token punctuation">(</span>default: <span class="token number">1</span><span class="token punctuation">)</span>.
+  --color, -c     <span class="token operator">&#x3C;</span>Color RGB<span class="token operator">></span> or <span class="token operator">&#x3C;</span>Color Name<span class="token operator">></span> <span class="token punctuation">(</span>default: <span class="token string">'blue'</span><span class="token punctuation">)</span>.<span class="token string">'
+  --gradient, -g  Adding a gradient to a badge.'</span>
 
 Example:
 
-  <span class="token function">npm</span> generated-badges --output coverage/badges.svg
-  <span class="token function">npm</span> generated-badges --style flat-square
-  <span class="token function">npm</span> generated-badges --color red
-</code><div onclick="copied(this)" data-code="Usage: coverage-badges [options] [--help|h]
+  generated-badges --output coverage/badges.svg
+  generated-badges --style classic
+  generated-badges --color red
+  generated-badges --gradient c05cff --gradient fa5b37
+</code><div onclick="copied(this)" data-code="Usage: generated-badges [options] [--help|h]
 
 Options:
 
-  --version, -v      Show version number.
-  --help, -h         Displays help information.
-  --output, -o       Output svg image path.
-  --style            Badges style: flat, flat-square.
-  --label, -l        The left label of the badge, usually static.
-  --labelColor       Hex or named color for the label. Default: 555
-  --status, -s       Override default status text.
-  --color, -c        <Color RGB> or <Color Name> (default: &#x27;blue&#x27;).&#x27;
+  --version, -v   Show version number.
+  --help, -h      Displays help information.
+  --output, -o    Output svg image path.
+  --label, -l     The left label of the badge, usually static.
+  --labelColor    <Color RGB> or <Color Name> (default: &#x27;555&#x27;)
+  --style         Badges style: flat, classic.
+  --status, -s    Override default status text.
+  --scale         Set badge scale (default: 1).
+  --color, -c     <Color RGB> or <Color Name> (default: &#x27;blue&#x27;).&#x27;
+  --gradient, -g  Adding a gradient to a badge.&#x27;
 
 Example:
 
-  npm generated-badges --output coverage/badges.svg
-  npm generated-badges --style flat-square
-  npm generated-badges --color red
+  generated-badges --output coverage/badges.svg
+  generated-badges --style classic
+  generated-badges --color red
+  generated-badges --gradient c05cff --gradient fa5b37
 " class="copied"><svg class="octicon-copy" aria-hidden="true" viewBox="0 0 16 16" fill="currentColor" height="12" width="12"><path fill-rule="evenodd" d="M0 6.75C0 5.784.784 5 1.75 5h1.5a.75.75 0 010 1.5h-1.5a.25.25 0 00-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 00.25-.25v-1.5a.75.75 0 011.5 0v1.5A1.75 1.75 0 019.25 16h-7.5A1.75 1.75 0 010 14.25v-7.5z"></path><path fill-rule="evenodd" d="M5 1.75C5 .784 5.784 0 6.75 0h7.5C15.216 0 16 .784 16 1.75v7.5A1.75 1.75 0 0114.25 11h-7.5A1.75 1.75 0 015 9.25v-7.5zm1.75-.25a.25.25 0 00-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 00.25-.25v-7.5a.25.25 0 00-.25-.25h-7.5z"></path></svg><svg class="octicon-check" aria-hidden="true" viewBox="0 0 16 16" fill="currentColor" height="12" width="12"><path fill-rule="evenodd" d="M13.78 4.22a.75.75 0 010 1.06l-7.25 7.25a.75.75 0 01-1.06 0L2.22 9.28a.75.75 0 011.06-1.06L6 10.94l6.72-6.72a.75.75 0 011.06 0z"></path></svg></div></pre>
       <h2 id="github-actions"><a class="anchor" aria-hidden="true" tabindex="-1" href="#github-actions"><span class="octicon octicon-link"></span></a>Github Actions</h2>
       <pre class="language-yml"><code class="language-yml"><span class="token punctuation">-</span> <span class="token key atrule">run</span><span class="token punctuation">:</span> mkdir <span class="token punctuation">-</span>p build
@@ -104,16 +110,18 @@ Example:
         <img src="https://jaywcjlove.github.io/generated-badges/purple.svg" alt="purple badges">
         <img src="https://jaywcjlove.github.io/generated-badges/grey.svg" alt="grey badges">
         <img src="https://jaywcjlove.github.io/generated-badges/black.svg" alt="black badges">
+        <img src="https://jaywcjlove.github.io/generated-badges/gradient.svg" alt="gradient badges">
       </p>
       <h3 id="input-parameters"><a class="anchor" aria-hidden="true" tabindex="-1" href="#input-parameters"><span class="octicon octicon-link"></span></a>Input Parameters</h3>
       <ul>
-        <li><code>label</code> description: The left label of the badge, usually static. (default <code>:label</code>)</li>
-        <li><code>status</code> description: The right status as the badge, usually based on results. (default <code>:status</code>)</li>
-        <li><code>style</code> description: 'Badges style: flat, classic.' (default <code>classic</code>)</li>
-        <li><code>color</code> description: An array (comma separated) with hex or named colors of the badge value background. (default <code>blue</code>)</li>
-        <li><code>labelColor</code> description: Hex or named color for the label. (default <code>555</code>)</li>
-        <li><code>output</code> description: Output image path. (default <code>BADGES.svg</code>)</li>
-        <li><code>scale</code> description: Set badge scale. (default <code>1</code>)</li>
+        <li><code>label</code> - The left label of the badge, usually static. (default <code>:label</code>)</li>
+        <li><code>status</code> - The right status as the badge, usually based on results. (default <code>:status</code>)</li>
+        <li><code>style</code> - Badges style: <code>flat</code>, <code>classic</code>. (default <code>classic</code>)</li>
+        <li><code>color</code> - An array (comma separated) with hex or named colors of the badge value background. (default <code>blue</code>)</li>
+        <li><code>labelColor</code> - Hex or named color for the label. (default <code>555</code>)</li>
+        <li><code>output</code> - Output image path. (default <code>BADGES.svg</code>)</li>
+        <li><code>scale</code> - Set badge scale. (default <code>1</code>)</li>
+        <li><code>gradient</code> - Adding a gradient to a badge. (example <code>['c05cff', 'fa5b37']</code>)</li>
       </ul>
       <h3 id="output-parameters"><a class="anchor" aria-hidden="true" tabindex="-1" href="#output-parameters"><span class="octicon octicon-link"></span></a>Output Parameters</h3>
       <ul>
