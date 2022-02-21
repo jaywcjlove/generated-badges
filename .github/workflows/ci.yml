@@ -90,8 +90,8 @@ jobs:
       - name: Generate gradient badges
         uses: ./
         with:
-          label: color
-          status: black
+          label: gradient
+          status: pink,F78642
           gradient: pink,F78642
           output: build/gradient.svg
 
