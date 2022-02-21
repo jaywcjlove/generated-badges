@@ -67,7 +67,8 @@ Example:
 
 ## Related
 
-- [Generated Badges](https://github.com/jaywcjlove/generated-badges) Create a badge using GitHub Actions and GitHub Workflow CPU time (no 3rd parties servers)
+- [github-action-contributors](https://github.com/jaywcjlove/github-action-contributors) Github action generates dynamic image URL for contributor list to display it!.
+- [coverage-badges-cli](https://github.com/jaywcjlove/coverage-badges-cli) Create coverage badges from coverage reports.
 
 ## License
 
