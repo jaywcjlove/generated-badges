@@ -21,6 +21,9 @@ try {
     const options = getInputs();
     const output = getInput('output') || 'BADGES.svg';
     const svgPath = path.resolve(process.cwd(), output);
+    startGroup(`Inputs: `);
+    info(`${options}`);
+    endGroup();
     const svgString = badgen({ ...options });
     startGroup(`Svg String: \x1b[34m(${svgPath})\x1b[0m`);
     info(`${svgString}`);

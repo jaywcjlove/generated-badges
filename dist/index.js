@@ -1652,6 +1652,9 @@ try {
         const options = getInputs();
         const output = (0, core_1.getInput)('output') || 'BADGES.svg';
         const svgPath = path_1.default.resolve(process.cwd(), output);
+        (0, core_1.startGroup)(`Inputs: `);
+        (0, core_1.info)(`${options}`);
+        (0, core_1.endGroup)();
         const svgString = (0, badgen_1.badgen)(Object.assign({}, options));
         (0, core_1.startGroup)(`Svg String: \x1b[34m(${svgPath})\x1b[0m`);
         (0, core_1.info)(`${svgString}`);
