@@ -79,7 +79,7 @@ Available color names:
 - `labelColor` - Hex or named color for the label. (default `555`)
 - `output` - Output image path. (default `BADGES.svg`)
 - `scale` - Set badge scale. (default `1`)
-- `gradient` - Adding a gradient to a badge. (example `['c05cff', 'fa5b37']`)
+- `gradient` - Adding a gradient to a badge. (example `c05cff,fa5b37`)
 
 ### Output Parameters
 
