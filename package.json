@@ -1,0 +1,47 @@
+{
+  "name": "generated-badges",
+  "version": "1.0.0",
+  "description": "Create a badge using GitHub Actions and GitHub Workflow CPU time (no 3rd parties servers)",
+  "bin": {
+    "generated-badges": "lib/bin",
+    "generated-badges-cli": "lib/bin"
+  },
+  "scripts": {
+    "prepare": "husky install && npm run package",
+    "package": "ncc build src/index.ts -o dist",
+    "start": "node lib/index.js",
+    "watch": "tsbb watch --disable-babel --file-names src/bin.ts",
+    "build": "tsbb build --disable-babel --file-names src/bin.ts",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "homepage": "https://github.com/jaywcjlove/generated-badges#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/jaywcjlove/generated-badges.git"
+  },
+  "files": [
+    "src",
+    "lib"
+  ],
+  "author": "jaywcjlove",
+  "license": "MIT",
+  "lint-staged": {
+    "*.ts?(x)": [
+      "npm run package"
+    ]
+  },
+  "dependencies": {
+    "@actions/core": "1.6.0",
+    "@types/minimist": "1.2.2",
+    "@types/fs-extra": "9.0.13",
+    "fs-extra": "10.0.0",
+    "minimist": "1.2.5",
+    "badgen": "3.2.2"
+  },
+  "devDependencies": {
+    "@vercel/ncc": "0.33.1",
+    "husky": "7.0.4",
+    "lint-staged": "12.3.1",
+    "tsbb": "^3.7.0"
+  }
+}

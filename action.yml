@@ -1,0 +1,50 @@
+name: 'Generated Badges'
+author: 'Kenny Wong'
+description: 'Create a badge using GitHub Actions and GitHub Workflow CPU time (no 3rd parties servers).'
+inputs:
+  label:
+    description: The left label of the badge, usually static.
+    default: ':label'
+    required: false
+
+  status:
+    description: The right status as the badge, usually based on results.
+    default: ':status'
+    required: false
+
+  style:
+    description: 'Badges style: flat, classic.'
+    default: classic
+    required: false
+
+  color:
+    description: An array (comma separated) with hex or named colors of the badge value background.
+    default: 'blue'
+    required: false
+
+  labelColor:
+    description: Hex or named color for the label.
+    default: '555'
+    required: false
+
+  output:
+    description: Output image path.
+    default: BADGES.svg
+    required: false
+
+  scale:
+    description: Set badge scale.
+    default: 1
+    required: false
+
+outputs:
+  svg:
+    description: 'svg image string'
+
+runs:
+  using: 'node12'
+  main: 'dist/index.js'
+
+branding:
+  icon: 'list'
+  color: 'blue'
