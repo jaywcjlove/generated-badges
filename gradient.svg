@@ -1,20 +1,20 @@
-<svg width="75.5" height="20" viewBox="0 0 755 200" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="color: black">
-  <title>color: black</title>
+<svg width="134.7" height="20" viewBox="0 0 1347 200" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="gradient: pink,F78642">
+  <title>gradient: pink,F78642</title>
   <linearGradient id="a" x2="0" y2="100%">
     <stop offset="0" stop-opacity=".1" stop-color="#EEE"/>
     <stop offset="1" stop-opacity=".1"/>
   </linearGradient>
-  <mask id="m"><rect width="755" height="200" rx="30" fill="#FFF"/></mask>
+  <mask id="m"><rect width="1347" height="200" rx="30" fill="#FFF"/></mask>
   <g mask="url(#m)">
-    <rect width="368" height="200" fill="#555"/>
-    <rect width="387" height="200" fill="url(#x)" x="368"/>
-    <rect width="755" height="200" fill="url(#a)"/>
+    <rect width="560" height="200" fill="#555"/>
+    <rect width="787" height="200" fill="url(#x)" x="560"/>
+    <rect width="1347" height="200" fill="url(#a)"/>
   </g>
   <g aria-hidden="true" fill="#fff" text-anchor="start" font-family="Verdana,DejaVu Sans,sans-serif" font-size="110">
-    <text x="60" y="148" textLength="268" fill="#000" opacity="0.25">color</text>
-    <text x="50" y="138" textLength="268">color</text>
-    <text x="423" y="148" textLength="287" fill="#000" opacity="0.25">black</text>
-    <text x="413" y="138" textLength="287">black</text>
+    <text x="60" y="148" textLength="460" fill="#000" opacity="0.25">gradient</text>
+    <text x="50" y="138" textLength="460">gradient</text>
+    <text x="615" y="148" textLength="687" fill="#000" opacity="0.25">pink,F78642</text>
+    <text x="605" y="138" textLength="687">pink,F78642</text>
   </g>
   
   <linearGradient id="x" x1="0%" y1="0%" x2="100%" y2="0%">
