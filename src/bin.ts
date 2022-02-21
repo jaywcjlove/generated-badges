@@ -84,13 +84,13 @@ export function cliHelp() {
   console.log('    --output, -o   ', 'Output svg image path.');
   console.log('    --label, -l    ', 'The left label of the badge, usually static.');
   console.log('    --labelColor   ', `<Color RGB> or <Color Name> (default: '555')`);
-  console.log('    --style        ', 'Badges style: flat, flat-square.');
+  console.log('    --style        ', 'Badges style: flat, classic.');
   console.log('    --status, -s   ', 'Override default status text.');
   console.log('    --scale        ', 'Set badge scale (default: 1).');
   console.log('    --color, -c    ', `<Color RGB> or <Color Name> (default: 'blue').'`);
   console.log('\n  Example:\n');
   console.log('    \x1b[35mgenerated-badges\x1b[0m \x1b[33m--output\x1b[0m coverage/badges.svg');
-  console.log('    \x1b[35mgenerated-badges\x1b[0m \x1b[33m--style\x1b[0m flat-square');
+  console.log('    \x1b[35mgenerated-badges\x1b[0m \x1b[33m--style\x1b[0m classic');
   console.log('    \x1b[35mgenerated-badges\x1b[0m \x1b[33m--color\x1b[0m red');
   console.log('\n');
 }
