@@ -1,6 +1,6 @@
 {
   "name": "generated-badges",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "Create a badge using GitHub Actions and GitHub Workflow CPU time (no 3rd parties servers)",
   "bin": {
     "generated-badges": "lib/bin",
@@ -14,7 +14,7 @@
     "build": "tsbb build --disable-babel --file-names src/bin.ts",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
-  "homepage": "https://github.com/jaywcjlove/generated-badges#readme",
+  "homepage": "https://jaywcjlove.github.io/generated-badges/",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/jaywcjlove/generated-badges.git"
