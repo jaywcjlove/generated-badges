@@ -23,6 +23,11 @@ try {
     const output = getInput('output') || 'BADGES.svg';
     const svgPath = path.resolve(process.cwd(), output);
     const gradient = gradientStr.split(',').filter(Boolean);
+
+    if (gradient.length === 1) {
+      options.color = gradient[0];
+    }
+
     startGroup(`Inputs: `);
     info(`gradient: ${Array.isArray(gradient)}, ${gradient}`);
     info(`${JSON.stringify(options, null, 2)}`);

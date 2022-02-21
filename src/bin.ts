@@ -54,6 +54,10 @@ function run() {
     return;
   }
 
+  if (argvs.gradient.length === 1) {
+    argvs.color = argvs.gradient[0];
+  }
+
   let svgString = badgen({
     label: argvs.label,
     labelColor: argvs.labelColor,
