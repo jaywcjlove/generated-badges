@@ -89,7 +89,7 @@ jobs:
           output: build/black.svg
 
       - name: Generate gradient badges
-        uses: ./
+        uses: jaywcjlove/generated-badges@main
         with:
           label: gradient
           status: pink,F78642
