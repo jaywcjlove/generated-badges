@@ -31,7 +31,6 @@
     ]
   },
   "dependencies": {
-    "@actions/core": "1.6.0",
     "@types/minimist": "1.2.2",
     "@types/fs-extra": "9.0.13",
     "fs-extra": "10.0.0",
@@ -39,6 +38,7 @@
     "badgen": "3.2.2"
   },
   "devDependencies": {
+    "@actions/core": "1.6.0",
     "@kkt/ncc": "1.0.3",
     "husky": "7.0.4",
     "lint-staged": "12.3.1",

@@ -16,38 +16,38 @@ export function getInputs(): BadgenOptions {
   }
 }
 
-try {
-  ;(async () => {
+;(async () => {
+  try {
     const options = getInputs();
     const gradientStr = getInput('gradient');
     const output = getInput('output') || 'BADGES.svg';
     const svgPath = path.resolve(process.cwd(), output);
     const gradient = gradientStr.split(',').filter(Boolean);
-
+  
     if (gradient.length === 1) {
       options.color = gradient[0];
     }
-
+  
     startGroup(`Inputs: `);
     info(`gradient: ${Array.isArray(gradient)}, ${gradient}`);
     info(`${JSON.stringify(options, null, 2)}`);
     endGroup();
-
+  
     let svgString = badgen({ ...options });
     if (Array.isArray(gradient) && gradient.length > 0) {
-      svgString = useColor(addGradient(svgString, gradient, 'x'), 'url(#x)')
+      svgString = useColor(addGradient(svgString, gradient, 'x'), 'url(#x)');
     }
-
+  
     startGroup(`Svg String: \x1b[34m(${svgPath})\x1b[0m`);
     info(`${svgString}`);
     endGroup();
-
-    setOutput('svg', svgString)
-
+  
+    setOutput('svg', svgString);
+  
     const data = new Uint8Array(Buffer.from(svgString));
     await fs.promises.writeFile(svgPath, data);
-    info(`Generated: "${svgPath}"`)
-  })();
-} catch (error) {
-  setFailed(error.message);
-}
+    info(`Generated: "${svgPath}"`);
+  } catch (error) {
+    setFailed(error.message);
+  }
+})();
