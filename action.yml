@@ -29,7 +29,7 @@ inputs:
 
   scale:
     description: Set badge scale.
-    default: 1
+    default: "1"
     required: false
 
   output:
@@ -46,7 +46,7 @@ outputs:
     description: 'svg image string'
 
 runs:
-  using: 'node12'
+  using: 'node16'
   main: 'dist/index.js'
 
 branding:
