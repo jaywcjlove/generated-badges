@@ -161,5 +161,11 @@ jobs:
 
             ![blue badges](https://jaywcjlove.github.io/generated-badges/blue.svg) ![cyan badges](https://jaywcjlove.github.io/generated-badges/cyan.svg) ![green badges](https://jaywcjlove.github.io/generated-badges/green.svg) ![yellow badges](https://jaywcjlove.github.io/generated-badges/yellow.svg) ![red badges](https://jaywcjlove.github.io/generated-badges/red.svg) ![pink badges](https://jaywcjlove.github.io/generated-badges/pink.svg) ![purple badges](https://jaywcjlove.github.io/generated-badges/purple.svg) ![grey badges](https://jaywcjlove.github.io/generated-badges/grey.svg) ![black badges](https://jaywcjlove.github.io/generated-badges/black.svg) ![gradient badges](https://jaywcjlove.github.io/generated-badges/gradient.svg)
 
-      - run: npm install @jsdevtools/npm-publish -g
-      - run: npm-publish --token="${{ secrets.NPM_TOKEN }}" ./package.json
+      # - run: npm install @jsdevtools/npm-publish -g
+      # - run: npm-publish --token="${{ secrets.NPM_TOKEN }}" ./package.json
+
+      - name: 📦 generated-badges publish to NPM
+        uses: JS-DevTools/npm-publish@v1
+        with:
+          token: ${{ secrets.NPM_TOKEN }}
+          package: ./package.json
