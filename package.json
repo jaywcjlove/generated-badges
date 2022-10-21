@@ -3,8 +3,8 @@
   "version": "1.0.6",
   "description": "Create a badge using GitHub Actions and GitHub Workflow CPU time (no 3rd parties servers)",
   "bin": {
-    "generated-badges": "lib/bin",
-    "generated-badges-cli": "lib/bin"
+    "generated-badges": "./lib/bin.js",
+    "generated-badges-cli": "./lib/bin.js"
   },
   "scripts": {
     "prepare": "husky install && npm run package",
