@@ -3,19 +3,19 @@ on: [push]
 
 jobs:
   test:
-    runs-on: ubuntu-18.04
+    runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v2
-      - uses: actions/setup-node@v2
+      - uses: actions/checkout@v3
+      - uses: actions/setup-node@v3
         with:
-          node-version: 14
+          node-version: 16
 
 
       - run: npm install
       - run: npm run build
       - run: mkdir -p build
       - run: npm i markdown-to-html-cli -g
-      - run: markdown-to-html --output build/index.html --favicon 'data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🏞️</text></svg>'
+      - run: markdown-to-html --output build/index.html --favicon 'data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🏞️</text></svg>' --github-corners https://github.com/jaywcjlove/generated-badges
 
       - name: Generate blue badges
         # uses: jaywcjlove/generated-badges@main
@@ -164,8 +164,14 @@ jobs:
       # - run: npm install @jsdevtools/npm-publish -g
       # - run: npm-publish --token="${{ secrets.NPM_TOKEN }}" ./package.json
 
-      - name: 📦 generated-badges publish to NPM
-        uses: JS-DevTools/npm-publish@v1
-        with:
-          token: ${{ secrets.NPM_TOKEN }}
-          package: ./package.json
+      # - name: 📦 generated-badges publish to NPM
+      #   uses: JS-DevTools/npm-publish@v1
+      #   with:
+      #     token: ${{ secrets.NPM_TOKEN }}
+      #     package: ./package.json
+
+      - run: npm publish
+        name: 📦 generated-badges publish to NPM
+        continue-on-error: true
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
