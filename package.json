@@ -10,8 +10,8 @@
     "prepare": "husky install && npm run package",
     "package": "ncc build src/index.ts -o dist",
     "start": "node lib/index.js",
-    "watch": "tsbb watch --disable-babel --file-names src/bin.ts",
-    "build": "tsbb build --disable-babel --file-names src/bin.ts",
+    "watch": "tsbb watch",
+    "build": "tsbb build",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "homepage": "https://jaywcjlove.github.io/generated-badges/",
@@ -42,6 +42,6 @@
     "@kkt/ncc": "^1.0.15",
     "husky": "^8.0.3",
     "lint-staged": "^13.1.2",
-    "tsbb": "^3.7.9"
+    "tsbb": "^4.1.3"
   }
 }
