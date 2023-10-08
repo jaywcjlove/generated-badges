@@ -45,7 +45,7 @@ jobs:
         with:
           label: color
           status: blue
-          output: build/blue.svg
+          output: dist/blue.svg
 
       - name: Generate cyan badges
         uses: ./
@@ -53,7 +53,7 @@ jobs:
           label: color
           status: cyan
           color: cyan
-          output: build/cyan.svg
+          output: dist/cyan.svg
 
       - name: Generate green badges
         uses: ./
@@ -61,7 +61,7 @@ jobs:
           label: color
           status: green
           color: green
-          output: build/green.svg
+          output: dist/green.svg
 
       - name: Generate yellow badges
         uses: ./
@@ -69,7 +69,7 @@ jobs:
           label: color
           status: yellow
           color: yellow
-          output: build/yellow.svg
+          output: dist/yellow.svg
 
       - name: Generate red badges
         uses: ./
@@ -77,7 +77,7 @@ jobs:
           label: color
           status: red
           color: red
-          output: build/red.svg
+          output: dist/red.svg
 
       - name: Generate pink badges
         uses: ./
@@ -85,7 +85,7 @@ jobs:
           label: color
           status: pink
           color: pink
-          output: build/pink.svg
+          output: dist/pink.svg
 
       - name: Generate purple badges
         uses: ./
@@ -93,7 +93,7 @@ jobs:
           label: color
           status: purple
           color: purple
-          output: build/purple.svg
+          output: dist/purple.svg
 
       - name: Generate grey badges
         uses: ./
@@ -101,7 +101,7 @@ jobs:
           label: color
           status: grey
           color: grey
-          output: build/grey.svg
+          output: dist/grey.svg
 
       - name: Generate black badges
         uses: ./
@@ -109,7 +109,7 @@ jobs:
           label: color
           status: black
           color: black
-          output: build/black.svg
+          output: dist/black.svg
 
       - name: Generate gradient badges
         uses: jaywcjlove/generated-badges@main
@@ -117,13 +117,13 @@ jobs:
           label: gradient
           status: pink,F78642
           gradient: pink,F78642
-          output: build/gradient.svg
+          output: dist/gradient.svg
 
       - name: Generate Contributors Images
         uses: jaywcjlove/github-action-contributors@main
         with:
           filter-author: (renovate\[bot\]|renovate-bot|dependabot\[bot\])
-          output: build/CONTRIBUTORS.svg
+          output: dist/CONTRIBUTORS.svg
           avatarSize: 42
 
       - name: Create Tag
@@ -141,7 +141,7 @@ jobs:
         with:
           commit_message: ${{steps.tag_version.outputs.tag}} ${{ github.event.head_commit.message }}
           github_token: ${{ secrets.GITHUB_TOKEN }}
-          publish_dir: ./build
+          publish_dir: ./dist
 
       - name: Generate Changelog
         id: changelog
