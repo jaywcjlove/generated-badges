@@ -8298,6 +8298,7 @@ var _createSuper = (__webpack_require__(6389)["default"]);
 var _asyncIterator = (__webpack_require__(8237)["default"]);
 var assert = __webpack_require__(9491);
 var net = __webpack_require__(1808);
+var http = __webpack_require__(3685);
 var _require = __webpack_require__(2781),
   pipeline = _require.pipeline;
 var util = __webpack_require__(3902);
@@ -8384,6 +8385,7 @@ var _http = http2,
   HTTP2_HEADER_AUTHORITY = _http$constants.HTTP2_HEADER_AUTHORITY,
   HTTP2_HEADER_METHOD = _http$constants.HTTP2_HEADER_METHOD,
   HTTP2_HEADER_PATH = _http$constants.HTTP2_HEADER_PATH,
+  HTTP2_HEADER_SCHEME = _http$constants.HTTP2_HEADER_SCHEME,
   HTTP2_HEADER_CONTENT_LENGTH = _http$constants.HTTP2_HEADER_CONTENT_LENGTH,
   HTTP2_HEADER_EXPECT = _http$constants.HTTP2_HEADER_EXPECT,
   HTTP2_HEADER_STATUS = _http$constants.HTTP2_HEADER_STATUS;
@@ -8540,7 +8542,7 @@ var Client = /*#__PURE__*/function (_DispatcherBase) {
     _this[kConnector] = connect;
     _this[kSocket] = null;
     _this[kPipelining] = pipelining != null ? pipelining : 1;
-    _this[kMaxHeadersSize] = maxHeaderSize || 16384;
+    _this[kMaxHeadersSize] = maxHeaderSize || http.maxHeaderSize;
     _this[kKeepAliveDefaultTimeout] = keepAliveTimeout == null ? 4e3 : keepAliveTimeout;
     _this[kKeepAliveMaxTimeout] = keepAliveMaxTimeout == null ? 600e3 : keepAliveMaxTimeout;
     _this[kKeepAliveTimeoutThreshold] = keepAliveTimeoutThreshold == null ? 1e3 : keepAliveTimeoutThreshold;
@@ -9939,7 +9941,7 @@ function writeH2(client, session, request) {
   var stream;
   var h2State = client[kHTTP2SessionState];
   headers[HTTP2_HEADER_AUTHORITY] = host || client[kHost];
-  headers[HTTP2_HEADER_PATH] = path;
+  headers[HTTP2_HEADER_METHOD] = method;
   if (method === 'CONNECT') {
     session.ref();
     // we are already connected, streams are pending, first request
@@ -9965,9 +9967,13 @@ function writeH2(client, session, request) {
       if (h2State.openStreams === 0) session.unref();
     });
     return true;
-  } else {
-    headers[HTTP2_HEADER_METHOD] = method;
   }
+
+  // https://tools.ietf.org/html/rfc7540#section-8.3
+  // :path and :scheme headers must be omited when sending CONNECT
+
+  headers[HTTP2_HEADER_PATH] = path;
+  headers[HTTP2_HEADER_SCHEME] = 'https';
 
   // https://tools.ietf.org/html/rfc7231#section-4.3.1
   // https://tools.ietf.org/html/rfc7231#section-4.3.2
@@ -10086,6 +10092,7 @@ function writeH2(client, session, request) {
       stream.cork();
       stream.write(body);
       stream.uncork();
+      stream.end();
       request.onBodySent(body);
       request.onRequestSent();
     } else if (util.isBlobLike(body)) {
@@ -10289,7 +10296,7 @@ function writeIterable(_x4) {
 }
 function _writeIterable() {
   _writeIterable = _asyncToGenerator( /*#__PURE__*/_regeneratorRuntime().mark(function _callee6(_ref5) {
-    var h2stream, body, client, request, socket, contentLength, header, expectsPayload, callback, onDrain, waitForDrain, _iteratorAbruptCompletion, _didIteratorError, _iteratorError, _iterator, _step, chunk, writer, _iteratorAbruptCompletion2, _didIteratorError2, _iteratorError2, _iterator2, _step2, _chunk;
+    var h2stream, body, client, request, socket, contentLength, header, expectsPayload, callback, onDrain, waitForDrain, _iteratorAbruptCompletion, _didIteratorError, _iteratorError, _iterator, _step, chunk, res, writer, _iteratorAbruptCompletion2, _didIteratorError2, _iteratorError2, _iterator2, _step2, _chunk;
     return _regeneratorRuntime().wrap(function _callee6$(_context6) {
       while (1) switch (_context6.prev = _context6.next) {
         case 0:
@@ -10314,7 +10321,7 @@ function _writeIterable() {
             });
           };
           if (!(client[kHTTPConnVersion] === 'h2')) {
-            _context6.next = 49;
+            _context6.next = 53;
             break;
           }
           h2stream.on('close', onDrain).on('drain', onDrain);
@@ -10329,7 +10336,7 @@ function _writeIterable() {
           return _iterator.next();
         case 14:
           if (!(_iteratorAbruptCompletion = !(_step = _context6.sent).done)) {
-            _context6.next = 24;
+            _context6.next = 26;
             break;
           }
           chunk = _step.value;
@@ -10339,58 +10346,62 @@ function _writeIterable() {
           }
           throw socket[kError];
         case 18:
-          if (h2stream.write(chunk)) {
-            _context6.next = 21;
+          res = h2stream.write(chunk);
+          request.onBodySent(chunk);
+          if (res) {
+            _context6.next = 23;
             break;
           }
-          _context6.next = 21;
+          _context6.next = 23;
           return waitForDrain();
-        case 21:
+        case 23:
           _iteratorAbruptCompletion = false;
           _context6.next = 12;
           break;
-        case 24:
-          _context6.next = 30;
-          break;
         case 26:
-          _context6.prev = 26;
+          _context6.next = 32;
+          break;
+        case 28:
+          _context6.prev = 28;
           _context6.t0 = _context6["catch"](10);
           _didIteratorError = true;
           _iteratorError = _context6.t0;
-        case 30:
-          _context6.prev = 30;
-          _context6.prev = 31;
+        case 32:
+          _context6.prev = 32;
+          _context6.prev = 33;
           if (!(_iteratorAbruptCompletion && _iterator["return"] != null)) {
-            _context6.next = 35;
+            _context6.next = 37;
             break;
           }
-          _context6.next = 35;
+          _context6.next = 37;
           return _iterator["return"]();
-        case 35:
-          _context6.prev = 35;
+        case 37:
+          _context6.prev = 37;
           if (!_didIteratorError) {
-            _context6.next = 38;
+            _context6.next = 40;
             break;
           }
           throw _iteratorError;
-        case 38:
-          return _context6.finish(35);
-        case 39:
-          return _context6.finish(30);
         case 40:
-          _context6.next = 45;
-          break;
+          return _context6.finish(37);
+        case 41:
+          return _context6.finish(32);
         case 42:
-          _context6.prev = 42;
+          _context6.next = 47;
+          break;
+        case 44:
+          _context6.prev = 44;
           _context6.t1 = _context6["catch"](7);
           h2stream.destroy(_context6.t1);
-        case 45:
-          _context6.prev = 45;
+        case 47:
+          _context6.prev = 47;
+          request.onRequestSent();
+          h2stream.end();
           h2stream.off('close', onDrain).off('drain', onDrain);
-          return _context6.finish(45);
-        case 48:
+          return _context6.finish(47);
+        case 52:
           return _context6.abrupt("return");
-        case 49:
+        case 53:
           socket.on('close', onDrain).on('drain', onDrain);
           writer = new AsyncWriter({
             socket: socket,
@@ -10400,82 +10411,82 @@ function _writeIterable() {
             expectsPayload: expectsPayload,
             header: header
           });
-          _context6.prev = 51;
+          _context6.prev = 55;
           // It's up to the user to somehow abort the async iterable.
           _iteratorAbruptCompletion2 = false;
           _didIteratorError2 = false;
-          _context6.prev = 54;
+          _context6.prev = 58;
           _iterator2 = _asyncIterator(body);
-        case 56:
-          _context6.next = 58;
+        case 60:
+          _context6.next = 62;
           return _iterator2.next();
-        case 58:
+        case 62:
           if (!(_iteratorAbruptCompletion2 = !(_step2 = _context6.sent).done)) {
-            _context6.next = 68;
+            _context6.next = 72;
             break;
           }
           _chunk = _step2.value;
           if (!socket[kError]) {
-            _context6.next = 62;
+            _context6.next = 66;
             break;
           }
           throw socket[kError];
-        case 62:
+        case 66:
           if (writer.write(_chunk)) {
-            _context6.next = 65;
+            _context6.next = 69;
             break;
           }
-          _context6.next = 65;
+          _context6.next = 69;
           return waitForDrain();
-        case 65:
+        case 69:
           _iteratorAbruptCompletion2 = false;
-          _context6.next = 56;
+          _context6.next = 60;
           break;
-        case 68:
-          _context6.next = 74;
+        case 72:
+          _context6.next = 78;
           break;
-        case 70:
-          _context6.prev = 70;
-          _context6.t2 = _context6["catch"](54);
-          _didIteratorError2 = true;
-          _iteratorError2 = _context6.t2;
         case 74:
           _context6.prev = 74;
-          _context6.prev = 75;
+          _context6.t2 = _context6["catch"](58);
+          _didIteratorError2 = true;
+          _iteratorError2 = _context6.t2;
+        case 78:
+          _context6.prev = 78;
+          _context6.prev = 79;
           if (!(_iteratorAbruptCompletion2 && _iterator2["return"] != null)) {
-            _context6.next = 79;
+            _context6.next = 83;
             break;
           }
-          _context6.next = 79;
+          _context6.next = 83;
           return _iterator2["return"]();
-        case 79:
-          _context6.prev = 79;
+        case 83:
+          _context6.prev = 83;
           if (!_didIteratorError2) {
-            _context6.next = 82;
+            _context6.next = 86;
             break;
           }
           throw _iteratorError2;
-        case 82:
-          return _context6.finish(79);
-        case 83:
-          return _context6.finish(74);
-        case 84:
-          writer.end();
-          _context6.next = 90;
-          break;
+        case 86:
+          return _context6.finish(83);
         case 87:
-          _context6.prev = 87;
-          _context6.t3 = _context6["catch"](51);
+          return _context6.finish(78);
+        case 88:
+          writer.end();
+          _context6.next = 94;
+          break;
+        case 91:
+          _context6.prev = 91;
+          _context6.t3 = _context6["catch"](55);
           writer.destroy(_context6.t3);
-        case 90:
-          _context6.prev = 90;
+        case 94:
+          _context6.prev = 94;
           socket.off('close', onDrain).off('drain', onDrain);
-          return _context6.finish(90);
-        case 93:
+          return _context6.finish(94);
+        case 97:
         case "end":
           return _context6.stop();
       }
-    }, _callee6, null, [[7, 42, 45, 48], [10, 26, 30, 40], [31,, 35, 39], [51, 87, 90, 93], [54, 70, 74, 84], [75,, 79, 83]]);
+    }, _callee6, null, [[7, 44, 47, 52], [10, 28, 32, 42], [33,, 37, 41], [55, 91, 94, 97], [58, 74, 78, 88], [79,, 83, 87]]);
   }));
   return _writeIterable.apply(this, arguments);
 }
@@ -10660,11 +10671,13 @@ var CompatFinalizer = /*#__PURE__*/function () {
     key: "register",
     value: function register(dispatcher, key) {
       var _this = this;
-      dispatcher.on('disconnect', function () {
-        if (dispatcher[kConnected] === 0 && dispatcher[kSize] === 0) {
-          _this.finalizer(key);
-        }
-      });
+      if (dispatcher.on) {
+        dispatcher.on('disconnect', function () {
+          if (dispatcher[kConnected] === 0 && dispatcher[kSize] === 0) {
+            _this.finalizer(key);
+          }
+        });
+      }
     }
   }]);
   return CompatFinalizer;
@@ -12412,7 +12425,7 @@ function processHeader(request, key, val) {
     }
   } else if (request.contentType === null && key.length === 12 && key.toLowerCase() === 'content-type') {
     request.contentType = val;
-    request.headers += processHeaderValue(key, val);
+    if (skipAppend) request.headers[key] = processHeaderValue(key, val, skipAppend);else request.headers += processHeaderValue(key, val);
   } else if (key.length === 17 && key.toLowerCase() === 'transfer-encoding') {
     throw new InvalidArgumentError('invalid transfer-encoding header');
   } else if (key.length === 10 && key.toLowerCase() === 'connection') {
@@ -17542,6 +17555,10 @@ function _httpRedirectFetch() {
           if (!sameOrigin(requestCurrentURL(request), locationURL)) {
             // https://fetch.spec.whatwg.org/#cors-non-wildcard-request-header-name
             request.headersList["delete"]('authorization');
+
+            // "Cookie" and "Host" are forbidden request-headers, which undici doesn't implement.
+            request.headersList["delete"]('cookie');
+            request.headersList["delete"]('host');
           }
 
           // 14. If request’s body is non-null, then set request’s body to the first return
@@ -17680,7 +17697,7 @@ function _httpNetworkOrCacheFetch() {
           //    user agents should append `User-Agent`/default `User-Agent` value to
           //    httpRequest’s header list.
           if (!httpRequest.headersList.contains('user-agent')) {
-            httpRequest.headersList.append('user-agent', 'undici');
+            httpRequest.headersList.append('user-agent', typeof esbuildDetection === 'undefined' ? 'undici' : 'node');
           }
 
           //    15. If httpRequest’s cache mode is "default" and httpRequest’s header
@@ -17730,6 +17747,7 @@ function _httpNetworkOrCacheFetch() {
               httpRequest.headersList.append('accept-encoding', 'gzip, deflate');
             }
           }
+          httpRequest.headersList["delete"]('host');
 
           //    20. If includeCredentials is true, then:
           if (includeCredentials) {
@@ -17764,18 +17782,18 @@ function _httpNetworkOrCacheFetch() {
 
           // 10. If response is null, then:
           if (!(response == null)) {
-            _context8.next = 37;
+            _context8.next = 38;
             break;
           }
           if (!(httpRequest.mode === 'only-if-cached')) {
-            _context8.next = 31;
+            _context8.next = 32;
             break;
           }
           return _context8.abrupt("return", makeNetworkError('only if cached'));
-        case 31:
-          _context8.next = 33;
+        case 32:
+          _context8.next = 34;
           return httpNetworkFetch(httpFetchParams, includeCredentials, isNewConnectionFetch);
-        case 33:
+        case 34:
           forwardResponse = _context8.sent;
           // 3. If httpRequest’s method is unsafe and forwardResponse’s status is
           // in the range 200 to 399, inclusive, invalidate appropriate stored
@@ -17800,7 +17818,7 @@ function _httpNetworkOrCacheFetch() {
             // "Storing Responses in Caches" chapter of HTTP Caching. [HTTP-CACHING]
             // TODO: cache
           }
-        case 37:
+        case 38:
           // 11. Set response’s URL list to a clone of httpRequest’s URL list.
           response.urlList = _toConsumableArray(httpRequest.urlList);
 
@@ -17820,23 +17838,23 @@ function _httpNetworkOrCacheFetch() {
 
           // 15. If response’s status is 407, then:
           if (!(response.status === 407)) {
-            _context8.next = 46;
+            _context8.next = 47;
             break;
           }
           if (!(request.window === 'no-window')) {
-            _context8.next = 43;
+            _context8.next = 44;
             break;
           }
           return _context8.abrupt("return", makeNetworkError());
-        case 43:
+        case 44:
           if (!isCancelled(fetchParams)) {
-            _context8.next = 45;
+            _context8.next = 46;
             break;
           }
           return _context8.abrupt("return", makeAppropriateNetworkError(fetchParams));
-        case 45:
-          return _context8.abrupt("return", makeNetworkError('proxy authentication required'));
         case 46:
+          return _context8.abrupt("return", makeNetworkError('proxy authentication required'));
+        case 47:
           if (!(
           // response’s status is 421
           response.status === 421 &&
@@ -17844,15 +17862,15 @@ function _httpNetworkOrCacheFetch() {
           !isNewConnectionFetch && (
           // request’s body is null, or request’s body is non-null and request’s body’s source is non-null
           request.body == null || request.body.source != null))) {
-            _context8.next = 53;
+            _context8.next = 54;
             break;
           }
           if (!isCancelled(fetchParams)) {
-            _context8.next = 49;
+            _context8.next = 50;
             break;
           }
           return _context8.abrupt("return", makeAppropriateNetworkError(fetchParams));
-        case 49:
+        case 50:
           // 2. Set response to the result of running HTTP-network-or-cache
           // fetch given fetchParams, isAuthenticationFetch, and true.
 
@@ -17860,11 +17878,11 @@ function _httpNetworkOrCacheFetch() {
           // the active response before we can start a new one.
           // https://github.com/whatwg/fetch/issues/1293
           fetchParams.controller.connection.destroy();
-          _context8.next = 52;
+          _context8.next = 53;
           return httpNetworkOrCacheFetch(fetchParams, isAuthenticationFetch, true);
-        case 52:
-          response = _context8.sent;
         case 53:
+          response = _context8.sent;
+        case 54:
           // 17. If isAuthenticationFetch is true, then create an authentication entry
           if (isAuthenticationFetch) {
             // TODO
@@ -17872,7 +17890,7 @@ function _httpNetworkOrCacheFetch() {
 
           // 18. Return response.
           return _context8.abrupt("return", response);
-        case 55:
+        case 56:
         case "end":
           return _context8.stop();
       }
@@ -29180,7 +29198,11 @@ module.exports = _inherits, module.exports.__esModule = true, module.exports["de
 /***/ ((module) => {
 
 function _isNativeFunction(fn) {
-  return Function.toString.call(fn).indexOf("[native code]") !== -1;
+  try {
+    return Function.toString.call(fn).indexOf("[native code]") !== -1;
+  } catch (e) {
+    return typeof fn === "function";
+  }
 }
 module.exports = _isNativeFunction, module.exports.__esModule = true, module.exports["default"] = module.exports;
 
