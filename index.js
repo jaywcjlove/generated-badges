@@ -2600,1405 +2600,6 @@ function isLoopbackAddress(host) {
 
 /***/ }),
 
-/***/ 2461:
-/***/ ((module, __unused_webpack_exports, __webpack_require__) => {
-
-"use strict";
-
-
-var WritableStream = (__webpack_require__(4492).Writable);
-var inherits = (__webpack_require__(7261).inherits);
-var StreamSearch = __webpack_require__(4785);
-var PartStream = __webpack_require__(8355);
-var HeaderParser = __webpack_require__(2062);
-var DASH = 45;
-var B_ONEDASH = Buffer.from('-');
-var B_CRLF = Buffer.from('\r\n');
-var EMPTY_FN = function EMPTY_FN() {};
-function Dicer(cfg) {
-  if (!(this instanceof Dicer)) {
-    return new Dicer(cfg);
-  }
-  WritableStream.call(this, cfg);
-  if (!cfg || !cfg.headerFirst && typeof cfg.boundary !== 'string') {
-    throw new TypeError('Boundary required');
-  }
-  if (typeof cfg.boundary === 'string') {
-    this.setBoundary(cfg.boundary);
-  } else {
-    this._bparser = undefined;
-  }
-  this._headerFirst = cfg.headerFirst;
-  this._dashes = 0;
-  this._parts = 0;
-  this._finished = false;
-  this._realFinish = false;
-  this._isPreamble = true;
-  this._justMatched = false;
-  this._firstWrite = true;
-  this._inHeader = true;
-  this._part = undefined;
-  this._cb = undefined;
-  this._ignoreData = false;
-  this._partOpts = {
-    highWaterMark: cfg.partHwm
-  };
-  this._pause = false;
-  var self = this;
-  this._hparser = new HeaderParser(cfg);
-  this._hparser.on('header', function (header) {
-    self._inHeader = false;
-    self._part.emit('header', header);
-  });
-}
-inherits(Dicer, WritableStream);
-Dicer.prototype.emit = function (ev) {
-  if (ev === 'finish' && !this._realFinish) {
-    if (!this._finished) {
-      var self = this;
-      process.nextTick(function () {
-        self.emit('error', new Error('Unexpected end of multipart data'));
-        if (self._part && !self._ignoreData) {
-          var type = self._isPreamble ? 'Preamble' : 'Part';
-          self._part.emit('error', new Error(type + ' terminated early due to unexpected end of multipart data'));
-          self._part.push(null);
-          process.nextTick(function () {
-            self._realFinish = true;
-            self.emit('finish');
-            self._realFinish = false;
-          });
-          return;
-        }
-        self._realFinish = true;
-        self.emit('finish');
-        self._realFinish = false;
-      });
-    }
-  } else {
-    WritableStream.prototype.emit.apply(this, arguments);
-  }
-};
-Dicer.prototype._write = function (data, encoding, cb) {
-  // ignore unexpected data (e.g. extra trailer data after finished)
-  if (!this._hparser && !this._bparser) {
-    return cb();
-  }
-  if (this._headerFirst && this._isPreamble) {
-    if (!this._part) {
-      this._part = new PartStream(this._partOpts);
-      if (this._events.preamble) {
-        this.emit('preamble', this._part);
-      } else {
-        this._ignore();
-      }
-    }
-    var r = this._hparser.push(data);
-    if (!this._inHeader && r !== undefined && r < data.length) {
-      data = data.slice(r);
-    } else {
-      return cb();
-    }
-  }
-
-  // allows for "easier" testing
-  if (this._firstWrite) {
-    this._bparser.push(B_CRLF);
-    this._firstWrite = false;
-  }
-  this._bparser.push(data);
-  if (this._pause) {
-    this._cb = cb;
-  } else {
-    cb();
-  }
-};
-Dicer.prototype.reset = function () {
-  this._part = undefined;
-  this._bparser = undefined;
-  this._hparser = undefined;
-};
-Dicer.prototype.setBoundary = function (boundary) {
-  var self = this;
-  this._bparser = new StreamSearch('\r\n--' + boundary);
-  this._bparser.on('info', function (isMatch, data, start, end) {
-    self._oninfo(isMatch, data, start, end);
-  });
-};
-Dicer.prototype._ignore = function () {
-  if (this._part && !this._ignoreData) {
-    this._ignoreData = true;
-    this._part.on('error', EMPTY_FN);
-    // we must perform some kind of read on the stream even though we are
-    // ignoring the data, otherwise node's Readable stream will not emit 'end'
-    // after pushing null to the stream
-    this._part.resume();
-  }
-};
-Dicer.prototype._oninfo = function (isMatch, data, start, end) {
-  var buf;
-  var self = this;
-  var i = 0;
-  var r;
-  var shouldWriteMore = true;
-  if (!this._part && this._justMatched && data) {
-    while (this._dashes < 2 && start + i < end) {
-      if (data[start + i] === DASH) {
-        ++i;
-        ++this._dashes;
-      } else {
-        if (this._dashes) {
-          buf = B_ONEDASH;
-        }
-        this._dashes = 0;
-        break;
-      }
-    }
-    if (this._dashes === 2) {
-      if (start + i < end && this._events.trailer) {
-        this.emit('trailer', data.slice(start + i, end));
-      }
-      this.reset();
-      this._finished = true;
-      // no more parts will be added
-      if (self._parts === 0) {
-        self._realFinish = true;
-        self.emit('finish');
-        self._realFinish = false;
-      }
-    }
-    if (this._dashes) {
-      return;
-    }
-  }
-  if (this._justMatched) {
-    this._justMatched = false;
-  }
-  if (!this._part) {
-    this._part = new PartStream(this._partOpts);
-    this._part._read = function (n) {
-      self._unpause();
-    };
-    if (this._isPreamble && this._events.preamble) {
-      this.emit('preamble', this._part);
-    } else if (this._isPreamble !== true && this._events.part) {
-      this.emit('part', this._part);
-    } else {
-      this._ignore();
-    }
-    if (!this._isPreamble) {
-      this._inHeader = true;
-    }
-  }
-  if (data && start < end && !this._ignoreData) {
-    if (this._isPreamble || !this._inHeader) {
-      if (buf) {
-        shouldWriteMore = this._part.push(buf);
-      }
-      shouldWriteMore = this._part.push(data.slice(start, end));
-      if (!shouldWriteMore) {
-        this._pause = true;
-      }
-    } else if (!this._isPreamble && this._inHeader) {
-      if (buf) {
-        this._hparser.push(buf);
-      }
-      r = this._hparser.push(data.slice(start, end));
-      if (!this._inHeader && r !== undefined && r < end) {
-        this._oninfo(false, data, start + r, end);
-      }
-    }
-  }
-  if (isMatch) {
-    this._hparser.reset();
-    if (this._isPreamble) {
-      this._isPreamble = false;
-    } else {
-      if (start !== end) {
-        ++this._parts;
-        this._part.on('end', function () {
-          if (--self._parts === 0) {
-            if (self._finished) {
-              self._realFinish = true;
-              self.emit('finish');
-              self._realFinish = false;
-            } else {
-              self._unpause();
-            }
-          }
-        });
-      }
-    }
-    this._part.push(null);
-    this._part = undefined;
-    this._ignoreData = false;
-    this._justMatched = true;
-    this._dashes = 0;
-  }
-};
-Dicer.prototype._unpause = function () {
-  if (!this._pause) {
-    return;
-  }
-  this._pause = false;
-  if (this._cb) {
-    var cb = this._cb;
-    this._cb = undefined;
-    cb();
-  }
-};
-module.exports = Dicer;
-
-/***/ }),
-
-/***/ 2062:
-/***/ ((module, __unused_webpack_exports, __webpack_require__) => {
-
-"use strict";
-
-
-var EventEmitter = (__webpack_require__(5673).EventEmitter);
-var inherits = (__webpack_require__(7261).inherits);
-var getLimit = __webpack_require__(1622);
-var StreamSearch = __webpack_require__(4785);
-var B_DCRLF = Buffer.from('\r\n\r\n');
-var RE_CRLF = /\r\n/g;
-var RE_HDR = /^([^:]+):[ \t]?([\x00-\xFF]+)?$/; // eslint-disable-line no-control-regex
-
-function HeaderParser(cfg) {
-  EventEmitter.call(this);
-  cfg = cfg || {};
-  var self = this;
-  this.nread = 0;
-  this.maxed = false;
-  this.npairs = 0;
-  this.maxHeaderPairs = getLimit(cfg, 'maxHeaderPairs', 2000);
-  this.maxHeaderSize = getLimit(cfg, 'maxHeaderSize', 80 * 1024);
-  this.buffer = '';
-  this.header = {};
-  this.finished = false;
-  this.ss = new StreamSearch(B_DCRLF);
-  this.ss.on('info', function (isMatch, data, start, end) {
-    if (data && !self.maxed) {
-      if (self.nread + end - start >= self.maxHeaderSize) {
-        end = self.maxHeaderSize - self.nread + start;
-        self.nread = self.maxHeaderSize;
-        self.maxed = true;
-      } else {
-        self.nread += end - start;
-      }
-      self.buffer += data.toString('binary', start, end);
-    }
-    if (isMatch) {
-      self._finish();
-    }
-  });
-}
-inherits(HeaderParser, EventEmitter);
-HeaderParser.prototype.push = function (data) {
-  var r = this.ss.push(data);
-  if (this.finished) {
-    return r;
-  }
-};
-HeaderParser.prototype.reset = function () {
-  this.finished = false;
-  this.buffer = '';
-  this.header = {};
-  this.ss.reset();
-};
-HeaderParser.prototype._finish = function () {
-  if (this.buffer) {
-    this._parseHeader();
-  }
-  this.ss.matches = this.ss.maxMatches;
-  var header = this.header;
-  this.header = {};
-  this.buffer = '';
-  this.finished = true;
-  this.nread = this.npairs = 0;
-  this.maxed = false;
-  this.emit('header', header);
-};
-HeaderParser.prototype._parseHeader = function () {
-  if (this.npairs === this.maxHeaderPairs) {
-    return;
-  }
-  var lines = this.buffer.split(RE_CRLF);
-  var len = lines.length;
-  var m, h;
-  for (var i = 0; i < len; ++i) {
-    // eslint-disable-line no-var
-    if (lines[i].length === 0) {
-      continue;
-    }
-    if (lines[i][0] === '\t' || lines[i][0] === ' ') {
-      // folded header content
-      // RFC2822 says to just remove the CRLF and not the whitespace following
-      // it, so we follow the RFC and include the leading whitespace ...
-      if (h) {
-        this.header[h][this.header[h].length - 1] += lines[i];
-        continue;
-      }
-    }
-    var posColon = lines[i].indexOf(':');
-    if (posColon === -1 || posColon === 0) {
-      return;
-    }
-    m = RE_HDR.exec(lines[i]);
-    h = m[1].toLowerCase();
-    this.header[h] = this.header[h] || [];
-    this.header[h].push(m[2] || '');
-    if (++this.npairs === this.maxHeaderPairs) {
-      break;
-    }
-  }
-};
-module.exports = HeaderParser;
-
-/***/ }),
-
-/***/ 8355:
-/***/ ((module, __unused_webpack_exports, __webpack_require__) => {
-
-"use strict";
-
-
-var inherits = (__webpack_require__(7261).inherits);
-var ReadableStream = (__webpack_require__(4492).Readable);
-function PartStream(opts) {
-  ReadableStream.call(this, opts);
-}
-inherits(PartStream, ReadableStream);
-PartStream.prototype._read = function (n) {};
-module.exports = PartStream;
-
-/***/ }),
-
-/***/ 4785:
-/***/ ((module, __unused_webpack_exports, __webpack_require__) => {
-
-"use strict";
-
-
-/**
- * Copyright Brian White. All rights reserved.
- *
- * @see https://github.com/mscdex/streamsearch
- *
- * Permission is hereby granted, free of charge, to any person obtaining a copy
- * of this software and associated documentation files (the "Software"), to
- * deal in the Software without restriction, including without limitation the
- * rights to use, copy, modify, merge, publish, distribute, sublicense, and/or
- * sell copies of the Software, and to permit persons to whom the Software is
- * furnished to do so, subject to the following conditions:
- *
- * The above copyright notice and this permission notice shall be included in
- * all copies or substantial portions of the Software.
- *
- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
- * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
- * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
- * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
- * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
- * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
- * IN THE SOFTWARE.
- *
- * Based heavily on the Streaming Boyer-Moore-Horspool C++ implementation
- * by Hongli Lai at: https://github.com/FooBarWidget/boyer-moore-horspool
- */
-var EventEmitter = (__webpack_require__(5673).EventEmitter);
-var inherits = (__webpack_require__(7261).inherits);
-function SBMH(needle) {
-  if (typeof needle === 'string') {
-    needle = Buffer.from(needle);
-  }
-  if (!Buffer.isBuffer(needle)) {
-    throw new TypeError('The needle has to be a String or a Buffer.');
-  }
-  var needleLength = needle.length;
-  if (needleLength === 0) {
-    throw new Error('The needle cannot be an empty String/Buffer.');
-  }
-  if (needleLength > 256) {
-    throw new Error('The needle cannot have a length bigger than 256.');
-  }
-  this.maxMatches = Infinity;
-  this.matches = 0;
-  this._occ = new Array(256).fill(needleLength); // Initialize occurrence table.
-  this._lookbehind_size = 0;
-  this._needle = needle;
-  this._bufpos = 0;
-  this._lookbehind = Buffer.alloc(needleLength);
-
-  // Populate occurrence table with analysis of the needle,
-  // ignoring last letter.
-  for (var i = 0; i < needleLength - 1; ++i) {
-    // eslint-disable-line no-var
-    this._occ[needle[i]] = needleLength - 1 - i;
-  }
-}
-inherits(SBMH, EventEmitter);
-SBMH.prototype.reset = function () {
-  this._lookbehind_size = 0;
-  this.matches = 0;
-  this._bufpos = 0;
-};
-SBMH.prototype.push = function (chunk, pos) {
-  if (!Buffer.isBuffer(chunk)) {
-    chunk = Buffer.from(chunk, 'binary');
-  }
-  var chlen = chunk.length;
-  this._bufpos = pos || 0;
-  var r;
-  while (r !== chlen && this.matches < this.maxMatches) {
-    r = this._sbmh_feed(chunk);
-  }
-  return r;
-};
-SBMH.prototype._sbmh_feed = function (data) {
-  var len = data.length;
-  var needle = this._needle;
-  var needleLength = needle.length;
-  var lastNeedleChar = needle[needleLength - 1];
-
-  // Positive: points to a position in `data`
-  //           pos == 3 points to data[3]
-  // Negative: points to a position in the lookbehind buffer
-  //           pos == -2 points to lookbehind[lookbehind_size - 2]
-  var pos = -this._lookbehind_size;
-  var ch;
-  if (pos < 0) {
-    // Lookbehind buffer is not empty. Perform Boyer-Moore-Horspool
-    // search with character lookup code that considers both the
-    // lookbehind buffer and the current round's haystack data.
-    //
-    // Loop until
-    //   there is a match.
-    // or until
-    //   we've moved past the position that requires the
-    //   lookbehind buffer. In this case we switch to the
-    //   optimized loop.
-    // or until
-    //   the character to look at lies outside the haystack.
-    while (pos < 0 && pos <= len - needleLength) {
-      ch = this._sbmh_lookup_char(data, pos + needleLength - 1);
-      if (ch === lastNeedleChar && this._sbmh_memcmp(data, pos, needleLength - 1)) {
-        this._lookbehind_size = 0;
-        ++this.matches;
-        this.emit('info', true);
-        return this._bufpos = pos + needleLength;
-      }
-      pos += this._occ[ch];
-    }
-
-    // No match.
-
-    if (pos < 0) {
-      // There's too few data for Boyer-Moore-Horspool to run,
-      // so let's use a different algorithm to skip as much as
-      // we can.
-      // Forward pos until
-      //   the trailing part of lookbehind + data
-      //   looks like the beginning of the needle
-      // or until
-      //   pos == 0
-      while (pos < 0 && !this._sbmh_memcmp(data, pos, len - pos)) {
-        ++pos;
-      }
-    }
-    if (pos >= 0) {
-      // Discard lookbehind buffer.
-      this.emit('info', false, this._lookbehind, 0, this._lookbehind_size);
-      this._lookbehind_size = 0;
-    } else {
-      // Cut off part of the lookbehind buffer that has
-      // been processed and append the entire haystack
-      // into it.
-      var bytesToCutOff = this._lookbehind_size + pos;
-      if (bytesToCutOff > 0) {
-        // The cut off data is guaranteed not to contain the needle.
-        this.emit('info', false, this._lookbehind, 0, bytesToCutOff);
-      }
-      this._lookbehind.copy(this._lookbehind, 0, bytesToCutOff, this._lookbehind_size - bytesToCutOff);
-      this._lookbehind_size -= bytesToCutOff;
-      data.copy(this._lookbehind, this._lookbehind_size);
-      this._lookbehind_size += len;
-      this._bufpos = len;
-      return len;
-    }
-  }
-  pos += (pos >= 0) * this._bufpos;
-
-  // Lookbehind buffer is now empty. We only need to check if the
-  // needle is in the haystack.
-  if (data.indexOf(needle, pos) !== -1) {
-    pos = data.indexOf(needle, pos);
-    ++this.matches;
-    if (pos > 0) {
-      this.emit('info', true, data, this._bufpos, pos);
-    } else {
-      this.emit('info', true);
-    }
-    return this._bufpos = pos + needleLength;
-  } else {
-    pos = len - needleLength;
-  }
-
-  // There was no match. If there's trailing haystack data that we cannot
-  // match yet using the Boyer-Moore-Horspool algorithm (because the trailing
-  // data is less than the needle size) then match using a modified
-  // algorithm that starts matching from the beginning instead of the end.
-  // Whatever trailing data is left after running this algorithm is added to
-  // the lookbehind buffer.
-  while (pos < len && (data[pos] !== needle[0] || Buffer.compare(data.subarray(pos, pos + len - pos), needle.subarray(0, len - pos)) !== 0)) {
-    ++pos;
-  }
-  if (pos < len) {
-    data.copy(this._lookbehind, 0, pos, pos + (len - pos));
-    this._lookbehind_size = len - pos;
-  }
-
-  // Everything until pos is guaranteed not to contain needle data.
-  if (pos > 0) {
-    this.emit('info', false, data, this._bufpos, pos < len ? pos : len);
-  }
-  this._bufpos = len;
-  return len;
-};
-SBMH.prototype._sbmh_lookup_char = function (data, pos) {
-  return pos < 0 ? this._lookbehind[this._lookbehind_size + pos] : data[pos];
-};
-SBMH.prototype._sbmh_memcmp = function (data, pos, len) {
-  for (var i = 0; i < len; ++i) {
-    // eslint-disable-line no-var
-    if (this._sbmh_lookup_char(data, pos + i) !== this._needle[i]) {
-      return false;
-    }
-  }
-  return true;
-};
-module.exports = SBMH;
-
-/***/ }),
-
-/***/ 1647:
-/***/ ((module, __unused_webpack_exports, __webpack_require__) => {
-
-"use strict";
-
-
-var _objectSpread = (__webpack_require__(2122)["default"]);
-var _objectWithoutProperties = (__webpack_require__(215)["default"]);
-var _excluded = ["headers"];
-var WritableStream = (__webpack_require__(4492).Writable);
-var _require = __webpack_require__(7261),
-  inherits = _require.inherits;
-var Dicer = __webpack_require__(2461);
-var MultipartParser = __webpack_require__(539);
-var UrlencodedParser = __webpack_require__(9788);
-var parseParams = __webpack_require__(2290);
-function Busboy(opts) {
-  if (!(this instanceof Busboy)) {
-    return new Busboy(opts);
-  }
-  if (typeof opts !== 'object') {
-    throw new TypeError('Busboy expected an options-Object.');
-  }
-  if (typeof opts.headers !== 'object') {
-    throw new TypeError('Busboy expected an options-Object with headers-attribute.');
-  }
-  if (typeof opts.headers['content-type'] !== 'string') {
-    throw new TypeError('Missing Content-Type-header.');
-  }
-  var headers = opts.headers,
-    streamOptions = _objectWithoutProperties(opts, _excluded);
-  this.opts = _objectSpread({
-    autoDestroy: false
-  }, streamOptions);
-  WritableStream.call(this, this.opts);
-  this._done = false;
-  this._parser = this.getParserByHeaders(headers);
-  this._finished = false;
-}
-inherits(Busboy, WritableStream);
-Busboy.prototype.emit = function (ev) {
-  if (ev === 'finish') {
-    if (!this._done) {
-      var _this$_parser;
-      (_this$_parser = this._parser) === null || _this$_parser === void 0 || _this$_parser.end();
-      return;
-    } else if (this._finished) {
-      return;
-    }
-    this._finished = true;
-  }
-  WritableStream.prototype.emit.apply(this, arguments);
-};
-Busboy.prototype.getParserByHeaders = function (headers) {
-  var parsed = parseParams(headers['content-type']);
-  var cfg = {
-    defCharset: this.opts.defCharset,
-    fileHwm: this.opts.fileHwm,
-    headers: headers,
-    highWaterMark: this.opts.highWaterMark,
-    isPartAFile: this.opts.isPartAFile,
-    limits: this.opts.limits,
-    parsedConType: parsed,
-    preservePath: this.opts.preservePath
-  };
-  if (MultipartParser.detect.test(parsed[0])) {
-    return new MultipartParser(this, cfg);
-  }
-  if (UrlencodedParser.detect.test(parsed[0])) {
-    return new UrlencodedParser(this, cfg);
-  }
-  throw new Error('Unsupported Content-Type.');
-};
-Busboy.prototype._write = function (chunk, encoding, cb) {
-  this._parser.write(chunk, cb);
-};
-module.exports = Busboy;
-module.exports["default"] = Busboy;
-module.exports.Busboy = Busboy;
-module.exports.Dicer = Dicer;
-
-/***/ }),
-
-/***/ 539:
-/***/ ((module, __unused_webpack_exports, __webpack_require__) => {
-
-"use strict";
-
-
-// TODO:
-//  * support 1 nested multipart level
-//    (see second multipart example here:
-//     http://www.w3.org/TR/html401/interact/forms.html#didx-multipartform-data)
-//  * support limits.fieldNameSize
-//     -- this will require modifications to utils.parseParams
-var _require = __webpack_require__(4492),
-  Readable = _require.Readable;
-var _require2 = __webpack_require__(7261),
-  inherits = _require2.inherits;
-var Dicer = __webpack_require__(2461);
-var parseParams = __webpack_require__(2290);
-var decodeText = __webpack_require__(3525);
-var basename = __webpack_require__(9958);
-var getLimit = __webpack_require__(1622);
-var RE_BOUNDARY = /^boundary$/i;
-var RE_FIELD = /^form-data$/i;
-var RE_CHARSET = /^charset$/i;
-var RE_FILENAME = /^filename$/i;
-var RE_NAME = /^name$/i;
-Multipart.detect = /^multipart\/form-data/i;
-function Multipart(boy, cfg) {
-  var i;
-  var len;
-  var self = this;
-  var boundary;
-  var limits = cfg.limits;
-  var isPartAFile = cfg.isPartAFile || function (fieldName, contentType, fileName) {
-    return contentType === 'application/octet-stream' || fileName !== undefined;
-  };
-  var parsedConType = cfg.parsedConType || [];
-  var defCharset = cfg.defCharset || 'utf8';
-  var preservePath = cfg.preservePath;
-  var fileOpts = {
-    highWaterMark: cfg.fileHwm
-  };
-  for (i = 0, len = parsedConType.length; i < len; ++i) {
-    if (Array.isArray(parsedConType[i]) && RE_BOUNDARY.test(parsedConType[i][0])) {
-      boundary = parsedConType[i][1];
-      break;
-    }
-  }
-  function checkFinished() {
-    if (nends === 0 && finished && !boy._done) {
-      finished = false;
-      self.end();
-    }
-  }
-  if (typeof boundary !== 'string') {
-    throw new Error('Multipart: Boundary not found');
-  }
-  var fieldSizeLimit = getLimit(limits, 'fieldSize', 1 * 1024 * 1024);
-  var fileSizeLimit = getLimit(limits, 'fileSize', Infinity);
-  var filesLimit = getLimit(limits, 'files', Infinity);
-  var fieldsLimit = getLimit(limits, 'fields', Infinity);
-  var partsLimit = getLimit(limits, 'parts', Infinity);
-  var headerPairsLimit = getLimit(limits, 'headerPairs', 2000);
-  var headerSizeLimit = getLimit(limits, 'headerSize', 80 * 1024);
-  var nfiles = 0;
-  var nfields = 0;
-  var nends = 0;
-  var curFile;
-  var curField;
-  var finished = false;
-  this._needDrain = false;
-  this._pause = false;
-  this._cb = undefined;
-  this._nparts = 0;
-  this._boy = boy;
-  var parserCfg = {
-    boundary: boundary,
-    maxHeaderPairs: headerPairsLimit,
-    maxHeaderSize: headerSizeLimit,
-    partHwm: fileOpts.highWaterMark,
-    highWaterMark: cfg.highWaterMark
-  };
-  this.parser = new Dicer(parserCfg);
-  this.parser.on('drain', function () {
-    self._needDrain = false;
-    if (self._cb && !self._pause) {
-      var cb = self._cb;
-      self._cb = undefined;
-      cb();
-    }
-  }).on('part', function onPart(part) {
-    if (++self._nparts > partsLimit) {
-      self.parser.removeListener('part', onPart);
-      self.parser.on('part', skipPart);
-      boy.hitPartsLimit = true;
-      boy.emit('partsLimit');
-      return skipPart(part);
-    }
-
-    // hack because streams2 _always_ doesn't emit 'end' until nextTick, so let
-    // us emit 'end' early since we know the part has ended if we are already
-    // seeing the next part
-    if (curField) {
-      var field = curField;
-      field.emit('end');
-      field.removeAllListeners('end');
-    }
-    part.on('header', function (header) {
-      var contype;
-      var fieldname;
-      var parsed;
-      var charset;
-      var encoding;
-      var filename;
-      var nsize = 0;
-      if (header['content-type']) {
-        parsed = parseParams(header['content-type'][0]);
-        if (parsed[0]) {
-          contype = parsed[0].toLowerCase();
-          for (i = 0, len = parsed.length; i < len; ++i) {
-            if (RE_CHARSET.test(parsed[i][0])) {
-              charset = parsed[i][1].toLowerCase();
-              break;
-            }
-          }
-        }
-      }
-      if (contype === undefined) {
-        contype = 'text/plain';
-      }
-      if (charset === undefined) {
-        charset = defCharset;
-      }
-      if (header['content-disposition']) {
-        parsed = parseParams(header['content-disposition'][0]);
-        if (!RE_FIELD.test(parsed[0])) {
-          return skipPart(part);
-        }
-        for (i = 0, len = parsed.length; i < len; ++i) {
-          if (RE_NAME.test(parsed[i][0])) {
-            fieldname = parsed[i][1];
-          } else if (RE_FILENAME.test(parsed[i][0])) {
-            filename = parsed[i][1];
-            if (!preservePath) {
-              filename = basename(filename);
-            }
-          }
-        }
-      } else {
-        return skipPart(part);
-      }
-      if (header['content-transfer-encoding']) {
-        encoding = header['content-transfer-encoding'][0].toLowerCase();
-      } else {
-        encoding = '7bit';
-      }
-      var onData, onEnd;
-      if (isPartAFile(fieldname, contype, filename)) {
-        // file/binary field
-        if (nfiles === filesLimit) {
-          if (!boy.hitFilesLimit) {
-            boy.hitFilesLimit = true;
-            boy.emit('filesLimit');
-          }
-          return skipPart(part);
-        }
-        ++nfiles;
-        if (!boy._events.file) {
-          self.parser._ignore();
-          return;
-        }
-        ++nends;
-        var file = new FileStream(fileOpts);
-        curFile = file;
-        file.on('end', function () {
-          --nends;
-          self._pause = false;
-          checkFinished();
-          if (self._cb && !self._needDrain) {
-            var cb = self._cb;
-            self._cb = undefined;
-            cb();
-          }
-        });
-        file._read = function (n) {
-          if (!self._pause) {
-            return;
-          }
-          self._pause = false;
-          if (self._cb && !self._needDrain) {
-            var cb = self._cb;
-            self._cb = undefined;
-            cb();
-          }
-        };
-        boy.emit('file', fieldname, file, filename, encoding, contype);
-        onData = function onData(data) {
-          if ((nsize += data.length) > fileSizeLimit) {
-            var extralen = fileSizeLimit - nsize + data.length;
-            if (extralen > 0) {
-              file.push(data.slice(0, extralen));
-            }
-            file.truncated = true;
-            file.bytesRead = fileSizeLimit;
-            part.removeAllListeners('data');
-            file.emit('limit');
-            return;
-          } else if (!file.push(data)) {
-            self._pause = true;
-          }
-          file.bytesRead = nsize;
-        };
-        onEnd = function onEnd() {
-          curFile = undefined;
-          file.push(null);
-        };
-      } else {
-        // non-file field
-        if (nfields === fieldsLimit) {
-          if (!boy.hitFieldsLimit) {
-            boy.hitFieldsLimit = true;
-            boy.emit('fieldsLimit');
-          }
-          return skipPart(part);
-        }
-        ++nfields;
-        ++nends;
-        var buffer = '';
-        var truncated = false;
-        curField = part;
-        onData = function onData(data) {
-          if ((nsize += data.length) > fieldSizeLimit) {
-            var extralen = fieldSizeLimit - (nsize - data.length);
-            buffer += data.toString('binary', 0, extralen);
-            truncated = true;
-            part.removeAllListeners('data');
-          } else {
-            buffer += data.toString('binary');
-          }
-        };
-        onEnd = function onEnd() {
-          curField = undefined;
-          if (buffer.length) {
-            buffer = decodeText(buffer, 'binary', charset);
-          }
-          boy.emit('field', fieldname, buffer, false, truncated, encoding, contype);
-          --nends;
-          checkFinished();
-        };
-      }
-
-      /* As of node@2efe4ab761666 (v0.10.29+/v0.11.14+), busboy had become
-         broken. Streams2/streams3 is a huge black box of confusion, but
-         somehow overriding the sync state seems to fix things again (and still
-         seems to work for previous node versions).
-      */
-      part._readableState.sync = false;
-      part.on('data', onData);
-      part.on('end', onEnd);
-    }).on('error', function (err) {
-      if (curFile) {
-        curFile.emit('error', err);
-      }
-    });
-  }).on('error', function (err) {
-    boy.emit('error', err);
-  }).on('finish', function () {
-    finished = true;
-    checkFinished();
-  });
-}
-Multipart.prototype.write = function (chunk, cb) {
-  var r = this.parser.write(chunk);
-  if (r && !this._pause) {
-    cb();
-  } else {
-    this._needDrain = !r;
-    this._cb = cb;
-  }
-};
-Multipart.prototype.end = function () {
-  var self = this;
-  if (self.parser.writable) {
-    self.parser.end();
-  } else if (!self._boy._done) {
-    process.nextTick(function () {
-      self._boy._done = true;
-      self._boy.emit('finish');
-    });
-  }
-};
-function skipPart(part) {
-  part.resume();
-}
-function FileStream(opts) {
-  Readable.call(this, opts);
-  this.bytesRead = 0;
-  this.truncated = false;
-}
-inherits(FileStream, Readable);
-FileStream.prototype._read = function (n) {};
-module.exports = Multipart;
-
-/***/ }),
-
-/***/ 9788:
-/***/ ((module, __unused_webpack_exports, __webpack_require__) => {
-
-"use strict";
-
-
-var Decoder = __webpack_require__(2769);
-var decodeText = __webpack_require__(3525);
-var getLimit = __webpack_require__(1622);
-var RE_CHARSET = /^charset$/i;
-UrlEncoded.detect = /^application\/x-www-form-urlencoded/i;
-function UrlEncoded(boy, cfg) {
-  var limits = cfg.limits;
-  var parsedConType = cfg.parsedConType;
-  this.boy = boy;
-  this.fieldSizeLimit = getLimit(limits, 'fieldSize', 1 * 1024 * 1024);
-  this.fieldNameSizeLimit = getLimit(limits, 'fieldNameSize', 100);
-  this.fieldsLimit = getLimit(limits, 'fields', Infinity);
-  var charset;
-  for (var i = 0, len = parsedConType.length; i < len; ++i) {
-    // eslint-disable-line no-var
-    if (Array.isArray(parsedConType[i]) && RE_CHARSET.test(parsedConType[i][0])) {
-      charset = parsedConType[i][1].toLowerCase();
-      break;
-    }
-  }
-  if (charset === undefined) {
-    charset = cfg.defCharset || 'utf8';
-  }
-  this.decoder = new Decoder();
-  this.charset = charset;
-  this._fields = 0;
-  this._state = 'key';
-  this._checkingBytes = true;
-  this._bytesKey = 0;
-  this._bytesVal = 0;
-  this._key = '';
-  this._val = '';
-  this._keyTrunc = false;
-  this._valTrunc = false;
-  this._hitLimit = false;
-}
-UrlEncoded.prototype.write = function (data, cb) {
-  if (this._fields === this.fieldsLimit) {
-    if (!this.boy.hitFieldsLimit) {
-      this.boy.hitFieldsLimit = true;
-      this.boy.emit('fieldsLimit');
-    }
-    return cb();
-  }
-  var idxeq;
-  var idxamp;
-  var i;
-  var p = 0;
-  var len = data.length;
-  while (p < len) {
-    if (this._state === 'key') {
-      idxeq = idxamp = undefined;
-      for (i = p; i < len; ++i) {
-        if (!this._checkingBytes) {
-          ++p;
-        }
-        if (data[i] === 0x3D /* = */) {
-          idxeq = i;
-          break;
-        } else if (data[i] === 0x26 /* & */) {
-          idxamp = i;
-          break;
-        }
-        if (this._checkingBytes && this._bytesKey === this.fieldNameSizeLimit) {
-          this._hitLimit = true;
-          break;
-        } else if (this._checkingBytes) {
-          ++this._bytesKey;
-        }
-      }
-      if (idxeq !== undefined) {
-        // key with assignment
-        if (idxeq > p) {
-          this._key += this.decoder.write(data.toString('binary', p, idxeq));
-        }
-        this._state = 'val';
-        this._hitLimit = false;
-        this._checkingBytes = true;
-        this._val = '';
-        this._bytesVal = 0;
-        this._valTrunc = false;
-        this.decoder.reset();
-        p = idxeq + 1;
-      } else if (idxamp !== undefined) {
-        // key with no assignment
-        ++this._fields;
-        var key = void 0;
-        var keyTrunc = this._keyTrunc;
-        if (idxamp > p) {
-          key = this._key += this.decoder.write(data.toString('binary', p, idxamp));
-        } else {
-          key = this._key;
-        }
-        this._hitLimit = false;
-        this._checkingBytes = true;
-        this._key = '';
-        this._bytesKey = 0;
-        this._keyTrunc = false;
-        this.decoder.reset();
-        if (key.length) {
-          this.boy.emit('field', decodeText(key, 'binary', this.charset), '', keyTrunc, false);
-        }
-        p = idxamp + 1;
-        if (this._fields === this.fieldsLimit) {
-          return cb();
-        }
-      } else if (this._hitLimit) {
-        // we may not have hit the actual limit if there are encoded bytes...
-        if (i > p) {
-          this._key += this.decoder.write(data.toString('binary', p, i));
-        }
-        p = i;
-        if ((this._bytesKey = this._key.length) === this.fieldNameSizeLimit) {
-          // yep, we actually did hit the limit
-          this._checkingBytes = false;
-          this._keyTrunc = true;
-        }
-      } else {
-        if (p < len) {
-          this._key += this.decoder.write(data.toString('binary', p));
-        }
-        p = len;
-      }
-    } else {
-      idxamp = undefined;
-      for (i = p; i < len; ++i) {
-        if (!this._checkingBytes) {
-          ++p;
-        }
-        if (data[i] === 0x26 /* & */) {
-          idxamp = i;
-          break;
-        }
-        if (this._checkingBytes && this._bytesVal === this.fieldSizeLimit) {
-          this._hitLimit = true;
-          break;
-        } else if (this._checkingBytes) {
-          ++this._bytesVal;
-        }
-      }
-      if (idxamp !== undefined) {
-        ++this._fields;
-        if (idxamp > p) {
-          this._val += this.decoder.write(data.toString('binary', p, idxamp));
-        }
-        this.boy.emit('field', decodeText(this._key, 'binary', this.charset), decodeText(this._val, 'binary', this.charset), this._keyTrunc, this._valTrunc);
-        this._state = 'key';
-        this._hitLimit = false;
-        this._checkingBytes = true;
-        this._key = '';
-        this._bytesKey = 0;
-        this._keyTrunc = false;
-        this.decoder.reset();
-        p = idxamp + 1;
-        if (this._fields === this.fieldsLimit) {
-          return cb();
-        }
-      } else if (this._hitLimit) {
-        // we may not have hit the actual limit if there are encoded bytes...
-        if (i > p) {
-          this._val += this.decoder.write(data.toString('binary', p, i));
-        }
-        p = i;
-        if (this._val === '' && this.fieldSizeLimit === 0 || (this._bytesVal = this._val.length) === this.fieldSizeLimit) {
-          // yep, we actually did hit the limit
-          this._checkingBytes = false;
-          this._valTrunc = true;
-        }
-      } else {
-        if (p < len) {
-          this._val += this.decoder.write(data.toString('binary', p));
-        }
-        p = len;
-      }
-    }
-  }
-  cb();
-};
-UrlEncoded.prototype.end = function () {
-  if (this.boy._done) {
-    return;
-  }
-  if (this._state === 'key' && this._key.length > 0) {
-    this.boy.emit('field', decodeText(this._key, 'binary', this.charset), '', this._keyTrunc, false);
-  } else if (this._state === 'val') {
-    this.boy.emit('field', decodeText(this._key, 'binary', this.charset), decodeText(this._val, 'binary', this.charset), this._keyTrunc, this._valTrunc);
-  }
-  this.boy._done = true;
-  this.boy.emit('finish');
-};
-module.exports = UrlEncoded;
-
-/***/ }),
-
-/***/ 2769:
-/***/ ((module) => {
-
-"use strict";
-
-
-var RE_PLUS = /\+/g;
-var HEX = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
-function Decoder() {
-  this.buffer = undefined;
-}
-Decoder.prototype.write = function (str) {
-  // Replace '+' with ' ' before decoding
-  str = str.replace(RE_PLUS, ' ');
-  var res = '';
-  var i = 0;
-  var p = 0;
-  var len = str.length;
-  for (; i < len; ++i) {
-    if (this.buffer !== undefined) {
-      if (!HEX[str.charCodeAt(i)]) {
-        res += '%' + this.buffer;
-        this.buffer = undefined;
-        --i; // retry character
-      } else {
-        this.buffer += str[i];
-        ++p;
-        if (this.buffer.length === 2) {
-          res += String.fromCharCode(parseInt(this.buffer, 16));
-          this.buffer = undefined;
-        }
-      }
-    } else if (str[i] === '%') {
-      if (i > p) {
-        res += str.substring(p, i);
-        p = i;
-      }
-      this.buffer = '';
-      ++p;
-    }
-  }
-  if (p < len && this.buffer === undefined) {
-    res += str.substring(p);
-  }
-  return res;
-};
-Decoder.prototype.reset = function () {
-  this.buffer = undefined;
-};
-module.exports = Decoder;
-
-/***/ }),
-
-/***/ 9958:
-/***/ ((module) => {
-
-"use strict";
-
-
-module.exports = function basename(path) {
-  if (typeof path !== 'string') {
-    return '';
-  }
-  for (var i = path.length - 1; i >= 0; --i) {
-    // eslint-disable-line no-var
-    switch (path.charCodeAt(i)) {
-      case 0x2F: // '/'
-      case 0x5C:
-        // '\'
-        path = path.slice(i + 1);
-        return path === '..' || path === '.' ? '' : path;
-    }
-  }
-  return path === '..' || path === '.' ? '' : path;
-};
-
-/***/ }),
-
-/***/ 3525:
-/***/ ((module) => {
-
-"use strict";
-
-
-// Node has always utf-8
-var utf8Decoder = new TextDecoder('utf-8');
-var textDecoders = new Map([['utf-8', utf8Decoder], ['utf8', utf8Decoder]]);
-function decodeText(text, textEncoding, destEncoding) {
-  if (text) {
-    if (textDecoders.has(destEncoding)) {
-      try {
-        return textDecoders.get(destEncoding).decode(Buffer.from(text, textEncoding));
-      } catch (e) {}
-    } else {
-      try {
-        textDecoders.set(destEncoding, new TextDecoder(destEncoding));
-        return textDecoders.get(destEncoding).decode(Buffer.from(text, textEncoding));
-      } catch (e) {}
-    }
-  }
-  return text;
-}
-module.exports = decodeText;
-
-/***/ }),
-
-/***/ 1622:
-/***/ ((module) => {
-
-"use strict";
-
-
-module.exports = function getLimit(limits, name, defaultLimit) {
-  if (!limits || limits[name] === undefined || limits[name] === null) {
-    return defaultLimit;
-  }
-  if (typeof limits[name] !== 'number' || isNaN(limits[name])) {
-    throw new TypeError('Limit ' + name + ' is not a valid number');
-  }
-  return limits[name];
-};
-
-/***/ }),
-
-/***/ 2290:
-/***/ ((module, __unused_webpack_exports, __webpack_require__) => {
-
-"use strict";
-
-
-var decodeText = __webpack_require__(3525);
-var RE_ENCODED = /%([a-fA-F0-9]{2})/g;
-function encodedReplacer(match, _byte) {
-  return String.fromCharCode(parseInt(_byte, 16));
-}
-function parseParams(str) {
-  var res = [];
-  var state = 'key';
-  var charset = '';
-  var inquote = false;
-  var escaping = false;
-  var p = 0;
-  var tmp = '';
-  for (var i = 0, len = str.length; i < len; ++i) {
-    // eslint-disable-line no-var
-    var _char = str[i];
-    if (_char === '\\' && inquote) {
-      if (escaping) {
-        escaping = false;
-      } else {
-        escaping = true;
-        continue;
-      }
-    } else if (_char === '"') {
-      if (!escaping) {
-        if (inquote) {
-          inquote = false;
-          state = 'key';
-        } else {
-          inquote = true;
-        }
-        continue;
-      } else {
-        escaping = false;
-      }
-    } else {
-      if (escaping && inquote) {
-        tmp += '\\';
-      }
-      escaping = false;
-      if ((state === 'charset' || state === 'lang') && _char === "'") {
-        if (state === 'charset') {
-          state = 'lang';
-          charset = tmp.substring(1);
-        } else {
-          state = 'value';
-        }
-        tmp = '';
-        continue;
-      } else if (state === 'key' && (_char === '*' || _char === '=') && res.length) {
-        if (_char === '*') {
-          state = 'charset';
-        } else {
-          state = 'value';
-        }
-        res[p] = [tmp, undefined];
-        tmp = '';
-        continue;
-      } else if (!inquote && _char === ';') {
-        state = 'key';
-        if (charset) {
-          if (tmp.length) {
-            tmp = decodeText(tmp.replace(RE_ENCODED, encodedReplacer), 'binary', charset);
-          }
-          charset = '';
-        } else if (tmp.length) {
-          tmp = decodeText(tmp, 'binary', 'utf8');
-        }
-        if (res[p] === undefined) {
-          res[p] = tmp;
-        } else {
-          res[p][1] = tmp;
-        }
-        tmp = '';
-        ++p;
-        continue;
-      } else if (!inquote && (_char === ' ' || _char === '\t')) {
-        continue;
-      }
-    }
-    tmp += _char;
-  }
-  if (charset && tmp.length) {
-    tmp = decodeText(tmp.replace(RE_ENCODED, encodedReplacer), 'binary', charset);
-  } else if (tmp) {
-    tmp = decodeText(tmp, 'binary', 'utf8');
-  }
-  if (res[p] === undefined) {
-    if (tmp) {
-      res[p] = tmp;
-    }
-  } else {
-    res[p][1] = tmp;
-  }
-  return res;
-}
-module.exports = parseParams;
-
-/***/ }),
-
 /***/ 1074:
 /***/ ((module, __unused_webpack_exports, __webpack_require__) => {
 
@@ -4436,6 +3037,7 @@ var MockAgent = __webpack_require__(3429);
 var MockPool = __webpack_require__(9730);
 var mockErrors = __webpack_require__(7497);
 var ProxyAgent = __webpack_require__(6345);
+var RetryHandler = __webpack_require__(7570);
 var _require = __webpack_require__(1500),
   getGlobalDispatcher = _require.getGlobalDispatcher,
   setGlobalDispatcher = _require.setGlobalDispatcher;
@@ -4456,6 +3058,7 @@ module.exports.Pool = Pool;
 module.exports.BalancedPool = BalancedPool;
 module.exports.Agent = Agent;
 module.exports.ProxyAgent = ProxyAgent;
+module.exports.RetryHandler = RetryHandler;
 module.exports.DecoratorHandler = DecoratorHandler;
 module.exports.RedirectHandler = RedirectHandler;
 module.exports.createRedirectInterceptor = createRedirectInterceptor;
@@ -5616,6 +4219,9 @@ var StreamHandler = /*#__PURE__*/function (_AsyncResource) {
           headers: headers
         });
       } else {
+        if (factory === null) {
+          return;
+        }
         res = this.runInAsyncScope(factory, null, {
           statusCode: statusCode,
           headers: headers,
@@ -5658,13 +4264,16 @@ var StreamHandler = /*#__PURE__*/function (_AsyncResource) {
     key: "onData",
     value: function onData(chunk) {
       var res = this.res;
-      return res.write(chunk);
+      return res ? res.write(chunk) : true;
     }
   }, {
     key: "onComplete",
     value: function onComplete(trailers) {
       var res = this.res;
       removeSignal(this);
+      if (!res) {
+        return;
+      }
       this.trailers = util.parseHeaders(trailers);
       res.end();
     }
@@ -5886,7 +4495,6 @@ var _get = (__webpack_require__(1588)["default"]);
 var _getPrototypeOf = (__webpack_require__(3808)["default"]);
 var _inherits = (__webpack_require__(1655)["default"]);
 var _createSuper = (__webpack_require__(6389)["default"]);
-var _asyncIterator = (__webpack_require__(8237)["default"]);
 var assert = __webpack_require__(9491);
 var _require = __webpack_require__(2781),
   Readable = _require.Readable;
@@ -5904,6 +4512,7 @@ var kReading = Symbol('kReading');
 var kBody = Symbol('kBody');
 var kAbort = Symbol('abort');
 var kContentType = Symbol('kContentType');
+var noop = function noop() {};
 module.exports = /*#__PURE__*/function (_Readable) {
   _inherits(BodyReadable, _Readable);
   var _super = _createSuper(BodyReadable);
@@ -6134,110 +4743,44 @@ module.exports = /*#__PURE__*/function (_Readable) {
     }
   }, {
     key: "dump",
-    value: function () {
-      var _dump = _asyncToGenerator( /*#__PURE__*/_regeneratorRuntime().mark(function _callee6(opts) {
-        var _this2 = this;
-        var limit, signal, abortFn, signalListenerCleanup, _iteratorAbruptCompletion, _didIteratorError, _iteratorError, _iterator, _step, chunk;
-        return _regeneratorRuntime().wrap(function _callee6$(_context6) {
-          while (1) switch (_context6.prev = _context6.next) {
-            case 0:
-              limit = opts && Number.isFinite(opts.limit) ? opts.limit : 262144;
-              signal = opts && opts.signal;
-              abortFn = function abortFn() {
-                _this2.destroy();
-              };
-              if (!signal) {
-                _context6.next = 8;
-                break;
-              }
-              if (!(typeof signal !== 'object' || !('aborted' in signal))) {
-                _context6.next = 6;
-                break;
-              }
-              throw new InvalidArgumentError('signal must be an AbortSignal');
-            case 6:
-              util.throwIfAborted(signal);
-              signalListenerCleanup = util.addAbortListener(signal, abortFn);
-            case 8:
-              _context6.prev = 8;
-              _iteratorAbruptCompletion = false;
-              _didIteratorError = false;
-              _context6.prev = 11;
-              _iterator = _asyncIterator(this);
-            case 13:
-              _context6.next = 15;
-              return _iterator.next();
-            case 15:
-              if (!(_iteratorAbruptCompletion = !(_step = _context6.sent).done)) {
-                _context6.next = 24;
-                break;
-              }
-              chunk = _step.value;
-              util.throwIfAborted(signal);
-              limit -= Buffer.byteLength(chunk);
-              if (!(limit < 0)) {
-                _context6.next = 21;
-                break;
-              }
-              return _context6.abrupt("return");
-            case 21:
-              _iteratorAbruptCompletion = false;
-              _context6.next = 13;
-              break;
-            case 24:
-              _context6.next = 30;
-              break;
-            case 26:
-              _context6.prev = 26;
-              _context6.t0 = _context6["catch"](11);
-              _didIteratorError = true;
-              _iteratorError = _context6.t0;
-            case 30:
-              _context6.prev = 30;
-              _context6.prev = 31;
-              if (!(_iteratorAbruptCompletion && _iterator["return"] != null)) {
-                _context6.next = 35;
-                break;
-              }
-              _context6.next = 35;
-              return _iterator["return"]();
-            case 35:
-              _context6.prev = 35;
-              if (!_didIteratorError) {
-                _context6.next = 38;
-                break;
-              }
-              throw _iteratorError;
-            case 38:
-              return _context6.finish(35);
-            case 39:
-              return _context6.finish(30);
-            case 40:
-              _context6.next = 45;
-              break;
-            case 42:
-              _context6.prev = 42;
-              _context6.t1 = _context6["catch"](8);
-              util.throwIfAborted(signal);
-            case 45:
-              _context6.prev = 45;
-              if (typeof signalListenerCleanup === 'function') {
-                signalListenerCleanup();
-              } else if (signalListenerCleanup) {
-                signalListenerCleanup[Symbol.dispose]();
-              }
-              return _context6.finish(45);
-            case 48:
-            case "end":
-              return _context6.stop();
+    value: function dump(opts) {
+      var _this2 = this;
+      var limit = opts && Number.isFinite(opts.limit) ? opts.limit : 262144;
+      var signal = opts && opts.signal;
+      if (signal) {
+        try {
+          if (typeof signal !== 'object' || !('aborted' in signal)) {
+            throw new InvalidArgumentError('signal must be an AbortSignal');
           }
-        }, _callee6, this, [[8, 42, 45, 48], [11, 26, 30, 40], [31,, 35, 39]]);
-      }));
-      function dump(_x) {
-        return _dump.apply(this, arguments);
+          util.throwIfAborted(signal);
+        } catch (err) {
+          return Promise.reject(err);
+        }
       }
-      return dump;
-    }()
+      if (this.closed) {
+        return Promise.resolve(null);
+      }
+      return new Promise(function (resolve, reject) {
+        var signalListenerCleanup = signal ? util.addAbortListener(signal, function () {
+          _this2.destroy();
+        }) : noop;
+        _this2.on('close', function () {
+          signalListenerCleanup();
+          if (signal !== null && signal !== void 0 && signal.aborted) {
+            reject(signal.reason || Object.assign(new Error('The operation was aborted'), {
+              name: 'AbortError'
+            }));
+          } else {
+            resolve(null);
+          }
+        }).on('error', noop).on('data', function (chunk) {
+          limit -= chunk.length;
+          if (limit <= 0) {
+            this.destroy();
+          }
+        }).resume();
+      });
+    }
   }]);
   return BodyReadable;
 }(Readable);
@@ -6252,22 +4795,22 @@ function isLocked(self) {
 function isUnusable(self) {
   return util.isDisturbed(self) || isLocked(self);
 }
-function consume(_x2, _x3) {
+function consume(_x, _x2) {
   return _consume.apply(this, arguments);
 }
 function _consume() {
-  _consume = _asyncToGenerator( /*#__PURE__*/_regeneratorRuntime().mark(function _callee7(stream, type) {
-    return _regeneratorRuntime().wrap(function _callee7$(_context7) {
-      while (1) switch (_context7.prev = _context7.next) {
+  _consume = _asyncToGenerator( /*#__PURE__*/_regeneratorRuntime().mark(function _callee6(stream, type) {
+    return _regeneratorRuntime().wrap(function _callee6$(_context6) {
+      while (1) switch (_context6.prev = _context6.next) {
         case 0:
           if (!isUnusable(stream)) {
-            _context7.next = 2;
+            _context6.next = 2;
             break;
           }
           throw new TypeError('unusable');
         case 2:
           assert(!stream[kConsume]);
-          return _context7.abrupt("return", new Promise(function (resolve, reject) {
+          return _context6.abrupt("return", new Promise(function (resolve, reject) {
             stream[kConsume] = {
               type: type,
               stream: stream,
@@ -6287,9 +4830,9 @@ function _consume() {
           }));
         case 4:
         case "end":
-          return _context7.stop();
+          return _context6.stop();
       }
-    }, _callee7);
+    }, _callee6);
   }));
   return _consume.apply(this, arguments);
 }
@@ -6298,17 +4841,17 @@ function consumeStart(consume) {
     return;
   }
   var state = consume.stream._readableState;
-  var _iterator2 = _createForOfIteratorHelper(state.buffer),
-    _step2;
+  var _iterator = _createForOfIteratorHelper(state.buffer),
+    _step;
   try {
-    for (_iterator2.s(); !(_step2 = _iterator2.n()).done;) {
-      var chunk = _step2.value;
+    for (_iterator.s(); !(_step = _iterator.n()).done;) {
+      var chunk = _step.value;
       consumePush(consume, chunk);
     }
   } catch (err) {
-    _iterator2.e(err);
+    _iterator.e(err);
   } finally {
-    _iterator2.f();
+    _iterator.f();
   }
   if (state.endEmitted) {
     consumeEnd(this[kConsume]);
@@ -6336,20 +4879,20 @@ function consumeEnd(consume) {
     } else if (type === 'arrayBuffer') {
       var dst = new Uint8Array(length);
       var pos = 0;
-      var _iterator3 = _createForOfIteratorHelper(body),
-        _step3;
+      var _iterator2 = _createForOfIteratorHelper(body),
+        _step2;
       try {
-        for (_iterator3.s(); !(_step3 = _iterator3.n()).done;) {
-          var buf = _step3.value;
+        for (_iterator2.s(); !(_step2 = _iterator2.n()).done;) {
+          var buf = _step2.value;
           dst.set(buf, pos);
           pos += buf.byteLength;
         }
       } catch (err) {
-        _iterator3.e(err);
+        _iterator2.e(err);
       } finally {
-        _iterator3.f();
+        _iterator2.f();
       }
-      resolve(dst);
+      resolve(dst.buffer);
     } else if (type === 'blob') {
       if (!Blob) {
         Blob = (__webpack_require__(4300).Blob);
@@ -6741,7 +5284,6 @@ var _classPrivateFieldInitSpec = (__webpack_require__(9159)["default"]);
 var _classPrivateMethodGet = (__webpack_require__(4467)["default"]);
 var _classPrivateFieldGet = (__webpack_require__(468)["default"]);
 var _classPrivateFieldSet = (__webpack_require__(5661)["default"]);
-var _Object$definePropert;
 var _require = __webpack_require__(9581),
   kConstruct = _require.kConstruct;
 var _require2 = __webpack_require__(6215),
@@ -7545,7 +6087,7 @@ var Cache = /*#__PURE__*/function () {
      */
   }, {
     key: "keys",
-    value: function () {
+    value: (function () {
       var _keys = _asyncToGenerator( /*#__PURE__*/_regeneratorRuntime().mark(function _callee7() {
         var request,
           options,
@@ -7665,7 +6207,7 @@ var Cache = /*#__PURE__*/function () {
         return _keys.apply(this, arguments);
       }
       return keys;
-    }()
+    }())
   }]);
   return Cache;
 }();
@@ -7894,10 +6436,10 @@ function _requestMatchesCachedItem2(requestQuery, request) {
   }
   return true;
 }
-Object.defineProperties(Cache.prototype, (_Object$definePropert = {}, _defineProperty(_Object$definePropert, Symbol.toStringTag, {
+Object.defineProperties(Cache.prototype, _defineProperty(_defineProperty(_defineProperty(_defineProperty(_defineProperty(_defineProperty(_defineProperty(_defineProperty({}, Symbol.toStringTag, {
   value: 'Cache',
   configurable: true
-}), _defineProperty(_Object$definePropert, "match", kEnumerableProperty), _defineProperty(_Object$definePropert, "matchAll", kEnumerableProperty), _defineProperty(_Object$definePropert, "add", kEnumerableProperty), _defineProperty(_Object$definePropert, "addAll", kEnumerableProperty), _defineProperty(_Object$definePropert, "put", kEnumerableProperty), _defineProperty(_Object$definePropert, "delete", kEnumerableProperty), _defineProperty(_Object$definePropert, "keys", kEnumerableProperty), _Object$definePropert));
+}), "match", kEnumerableProperty), "matchAll", kEnumerableProperty), "add", kEnumerableProperty), "addAll", kEnumerableProperty), "put", kEnumerableProperty), "delete", kEnumerableProperty), "keys", kEnumerableProperty));
 var cacheQueryOptionConverters = [{
   key: 'ignoreSearch',
   converter: webidl.converters["boolean"],
@@ -7939,7 +6481,6 @@ var _classCallCheck = (__webpack_require__(6690)["default"]);
 var _createClass = (__webpack_require__(9728)["default"]);
 var _classPrivateFieldInitSpec = (__webpack_require__(9159)["default"]);
 var _classPrivateFieldGet = (__webpack_require__(468)["default"]);
-var _Object$definePropert;
 var _require = __webpack_require__(9581),
   kConstruct = _require.kConstruct;
 var _require2 = __webpack_require__(1147),
@@ -8061,7 +6602,7 @@ var CacheStorage = /*#__PURE__*/function () {
      */
   }, {
     key: "has",
-    value: function () {
+    value: (function () {
       var _has = _asyncToGenerator( /*#__PURE__*/_regeneratorRuntime().mark(function _callee2(cacheName) {
         var _args2 = arguments;
         return _regeneratorRuntime().wrap(function _callee2$(_context2) {
@@ -8092,9 +6633,10 @@ var CacheStorage = /*#__PURE__*/function () {
      * @param {string} cacheName
      * @returns {Promise<Cache>}
      */
+    )
   }, {
     key: "open",
-    value: function () {
+    value: (function () {
       var _open = _asyncToGenerator( /*#__PURE__*/_regeneratorRuntime().mark(function _callee3(cacheName) {
         var _cache2,
           cache,
@@ -8140,9 +6682,10 @@ var CacheStorage = /*#__PURE__*/function () {
      * @param {string} cacheName
      * @returns {Promise<boolean>}
      */
+    )
   }, {
     key: "delete",
-    value: function () {
+    value: (function () {
       var _delete2 = _asyncToGenerator( /*#__PURE__*/_regeneratorRuntime().mark(function _callee4(cacheName) {
         var _args4 = arguments;
         return _regeneratorRuntime().wrap(function _callee4$(_context4) {
@@ -8169,9 +6712,10 @@ var CacheStorage = /*#__PURE__*/function () {
      * @see https://w3c.github.io/ServiceWorker/#cache-storage-keys
      * @returns {string[]}
      */
+    )
   }, {
     key: "keys",
-    value: function () {
+    value: (function () {
       var _keys = _asyncToGenerator( /*#__PURE__*/_regeneratorRuntime().mark(function _callee5() {
         var keys;
         return _regeneratorRuntime().wrap(function _callee5$(_context5) {
@@ -8192,14 +6736,14 @@ var CacheStorage = /*#__PURE__*/function () {
         return _keys.apply(this, arguments);
       }
       return keys;
-    }()
+    }())
   }]);
   return CacheStorage;
 }();
-Object.defineProperties(CacheStorage.prototype, (_Object$definePropert = {}, _defineProperty(_Object$definePropert, Symbol.toStringTag, {
+Object.defineProperties(CacheStorage.prototype, _defineProperty(_defineProperty(_defineProperty(_defineProperty(_defineProperty(_defineProperty({}, Symbol.toStringTag, {
   value: 'CacheStorage',
   configurable: true
-}), _defineProperty(_Object$definePropert, "match", kEnumerableProperty), _defineProperty(_Object$definePropert, "has", kEnumerableProperty), _defineProperty(_Object$definePropert, "open", kEnumerableProperty), _defineProperty(_Object$definePropert, "delete", kEnumerableProperty), _defineProperty(_Object$definePropert, "keys", kEnumerableProperty), _Object$definePropert));
+}), "match", kEnumerableProperty), "has", kEnumerableProperty), "open", kEnumerableProperty), "delete", kEnumerableProperty), "keys", kEnumerableProperty));
 module.exports = {
   CacheStorage: CacheStorage
 };
@@ -8288,6 +6832,8 @@ module.exports = {
 
 
 /* global WebAssembly */
+var _objectWithoutProperties = (__webpack_require__(215)["default"]);
+var _toPropertyKey = (__webpack_require__(4062)["default"]);
 var _regeneratorRuntime = (__webpack_require__(7061)["default"]);
 var _asyncToGenerator = (__webpack_require__(7156)["default"]);
 var _objectSpread = (__webpack_require__(2122)["default"]);
@@ -9321,7 +7867,9 @@ function onParserTimeout(parser) {
 }
 function onSocketReadable() {
   var parser = this[kParser];
-  parser.readMore();
+  if (parser) {
+    parser.readMore();
+  }
 }
 function onSocketError(err) {
   var client = this[kClient],
@@ -9413,7 +7961,7 @@ function _connect() {
           if (hostname[0] === '[') {
             idx = hostname.indexOf(']');
             assert(idx !== -1);
-            ip = hostname.substr(1, idx - 1);
+            ip = hostname.substring(1, idx);
             assert(net.isIP(ip));
             hostname = ip;
           }
@@ -9592,146 +8140,111 @@ function resume(client, sync) {
   }
 }
 function _resume(client, sync) {
-  var _loop = function _loop() {
-      if (client.destroyed) {
-        assert(client[kPending] === 0);
-        return {
-          v: void 0
-        };
-      }
-      if (client[kClosedResolve] && !client[kSize]) {
-        client[kClosedResolve]();
-        client[kClosedResolve] = null;
-        return {
-          v: void 0
-        };
-      }
-      var socket = client[kSocket];
-      if (socket && !socket.destroyed && socket.alpnProtocol !== 'h2') {
-        if (client[kSize] === 0) {
-          if (!socket[kNoRef] && socket.unref) {
-            socket.unref();
-            socket[kNoRef] = true;
-          }
-        } else if (socket[kNoRef] && socket.ref) {
-          socket.ref();
-          socket[kNoRef] = false;
-        }
-        if (client[kSize] === 0) {
-          if (socket[kParser].timeoutType !== TIMEOUT_IDLE) {
-            socket[kParser].setTimeout(client[kKeepAliveTimeoutValue], TIMEOUT_IDLE);
-          }
-        } else if (client[kRunning] > 0 && socket[kParser].statusCode < 200) {
-          if (socket[kParser].timeoutType !== TIMEOUT_HEADERS) {
-            var _request3 = client[kQueue][client[kRunningIdx]];
-            var headersTimeout = _request3.headersTimeout != null ? _request3.headersTimeout : client[kHeadersTimeout];
-            socket[kParser].setTimeout(headersTimeout, TIMEOUT_HEADERS);
-          }
-        }
-      }
-      if (client[kBusy]) {
-        client[kNeedDrain] = 2;
-      } else if (client[kNeedDrain] === 2) {
-        if (sync) {
-          client[kNeedDrain] = 1;
-          process.nextTick(emitDrain, client);
-        } else {
-          emitDrain(client);
-        }
-        return 0; // continue
-      }
-      if (client[kPending] === 0) {
-        return {
-          v: void 0
-        };
-      }
-      if (client[kRunning] >= (client[kPipelining] || 1)) {
-        return {
-          v: void 0
-        };
-      }
-      var request = client[kQueue][client[kPendingIdx]];
-      if (client[kUrl].protocol === 'https:' && client[kServerName] !== request.servername) {
-        if (client[kRunning] > 0) {
-          return {
-            v: void 0
-          };
-        }
-        client[kServerName] = request.servername;
-        if (socket && socket.servername !== request.servername) {
-          util.destroy(socket, new InformationalError('servername changed'));
-          return {
-            v: void 0
-          };
-        }
-      }
-      if (client[kConnecting]) {
-        return {
-          v: void 0
-        };
-      }
-      if (!socket && !client[kHTTP2Session]) {
-        connect(client);
-        return {
-          v: void 0
-        };
-      }
-      if (socket.destroyed || socket[kWriting] || socket[kReset] || socket[kBlocking]) {
-        return {
-          v: void 0
-        };
-      }
-      if (client[kRunning] > 0 && !request.idempotent) {
-        // Non-idempotent request cannot be retried.
-        // Ensure that no other requests are inflight and
-        // could cause failure.
-        return {
-          v: void 0
-        };
-      }
-      if (client[kRunning] > 0 && (request.upgrade || request.method === 'CONNECT')) {
-        // Don't dispatch an upgrade until all preceding requests have completed.
-        // A misbehaving server might upgrade the connection before all pipelined
-        // request has completed.
-        return {
-          v: void 0
-        };
-      }
-      if (util.isStream(request.body) && util.bodyLength(request.body) === 0) {
-        request.body.on('data', /* istanbul ignore next */function () {
-          /* istanbul ignore next */
-          assert(false);
-        }).on('error', function (err) {
-          errorRequest(client, request, err);
-        }).on('end', function () {
-          util.destroy(this);
-        });
-        request.body = null;
-      }
-      if (client[kRunning] > 0 && (util.isStream(request.body) || util.isAsyncIterable(request.body))) {
-        // Request with stream or iterator body can error while other requests
-        // are inflight and indirectly error those as well.
-        // Ensure this doesn't happen by waiting for inflight
-        // to complete before dispatching.
-        // Request with stream or iterator body cannot be retried.
-        // Ensure that no other requests are inflight and
-        // could cause failure.
-        return {
-          v: void 0
-        };
-      }
-      if (!request.aborted && write(client, request)) {
-        client[kPendingIdx]++;
-      } else {
-        client[kQueue].splice(client[kPendingIdx], 1);
-      }
-    },
-    _ret;
   while (true) {
-    _ret = _loop();
-    if (_ret === 0) continue;
-    if (_ret) return _ret.v;
+    if (client.destroyed) {
+      assert(client[kPending] === 0);
+      return;
+    }
+    if (client[kClosedResolve] && !client[kSize]) {
+      client[kClosedResolve]();
+      client[kClosedResolve] = null;
+      return;
+    }
+    var socket = client[kSocket];
+    if (socket && !socket.destroyed && socket.alpnProtocol !== 'h2') {
+      if (client[kSize] === 0) {
+        if (!socket[kNoRef] && socket.unref) {
+          socket.unref();
+          socket[kNoRef] = true;
+        }
+      } else if (socket[kNoRef] && socket.ref) {
+        socket.ref();
+        socket[kNoRef] = false;
+      }
+      if (client[kSize] === 0) {
+        if (socket[kParser].timeoutType !== TIMEOUT_IDLE) {
+          socket[kParser].setTimeout(client[kKeepAliveTimeoutValue], TIMEOUT_IDLE);
+        }
+      } else if (client[kRunning] > 0 && socket[kParser].statusCode < 200) {
+        if (socket[kParser].timeoutType !== TIMEOUT_HEADERS) {
+          var _request3 = client[kQueue][client[kRunningIdx]];
+          var headersTimeout = _request3.headersTimeout != null ? _request3.headersTimeout : client[kHeadersTimeout];
+          socket[kParser].setTimeout(headersTimeout, TIMEOUT_HEADERS);
+        }
+      }
+    }
+    if (client[kBusy]) {
+      client[kNeedDrain] = 2;
+    } else if (client[kNeedDrain] === 2) {
+      if (sync) {
+        client[kNeedDrain] = 1;
+        process.nextTick(emitDrain, client);
+      } else {
+        emitDrain(client);
+      }
+      continue;
+    }
+    if (client[kPending] === 0) {
+      return;
+    }
+    if (client[kRunning] >= (client[kPipelining] || 1)) {
+      return;
+    }
+    var request = client[kQueue][client[kPendingIdx]];
+    if (client[kUrl].protocol === 'https:' && client[kServerName] !== request.servername) {
+      if (client[kRunning] > 0) {
+        return;
+      }
+      client[kServerName] = request.servername;
+      if (socket && socket.servername !== request.servername) {
+        util.destroy(socket, new InformationalError('servername changed'));
+        return;
+      }
+    }
+    if (client[kConnecting]) {
+      return;
+    }
+    if (!socket && !client[kHTTP2Session]) {
+      connect(client);
+      return;
+    }
+    if (socket.destroyed || socket[kWriting] || socket[kReset] || socket[kBlocking]) {
+      return;
+    }
+    if (client[kRunning] > 0 && !request.idempotent) {
+      // Non-idempotent request cannot be retried.
+      // Ensure that no other requests are inflight and
+      // could cause failure.
+      return;
+    }
+    if (client[kRunning] > 0 && (request.upgrade || request.method === 'CONNECT')) {
+      // Don't dispatch an upgrade until all preceding requests have completed.
+      // A misbehaving server might upgrade the connection before all pipelined
+      // request has completed.
+      return;
+    }
+    if (client[kRunning] > 0 && util.bodyLength(request.body) !== 0 && (util.isStream(request.body) || util.isAsyncIterable(request.body))) {
+      // Request with stream or iterator body can error while other requests
+      // are inflight and indirectly error those as well.
+      // Ensure this doesn't happen by waiting for inflight
+      // to complete before dispatching.
+
+      // Request with stream or iterator body cannot be retried.
+      // Ensure that no other requests are inflight and
+      // could cause failure.
+      return;
+    }
+    if (!request.aborted && write(client, request)) {
+      client[kPendingIdx]++;
+    } else {
+      client[kQueue].splice(client[kPendingIdx], 1);
+    }
   }
+}
+
+// https://www.rfc-editor.org/rfc/rfc7230#section-3.3.2
+function shouldSendContentLength(method) {
+  return method !== 'GET' && method !== 'HEAD' && method !== 'OPTIONS' && method !== 'TRACE' && method !== 'CONNECT';
 }
 function write(client, request) {
   if (client[kHTTPConnVersion] === 'h2') {
@@ -9761,7 +8274,8 @@ function write(client, request) {
     // Try to read EOF in order to get length.
     body.read(0);
   }
-  var contentLength = util.bodyLength(body);
+  var bodyLength = util.bodyLength(body);
+  var contentLength = bodyLength;
   if (contentLength === null) {
     contentLength = request.contentLength;
   }
@@ -9773,7 +8287,10 @@ function write(client, request) {
 
     contentLength = null;
   }
-  if (request.contentLength !== null && request.contentLength !== contentLength) {
+
+  // https://github.com/nodejs/undici/issues/2046
+  // A user agent may send a Content-Length header with 0 value, this should be allowed.
+  if (shouldSendContentLength(method) && contentLength > 0 && request.contentLength !== null && request.contentLength !== contentLength) {
     if (client[kStrictContentLength]) {
       errorRequest(client, request, new RequestContentLengthMismatchError());
       return false;
@@ -9842,7 +8359,7 @@ function write(client, request) {
   }
 
   /* istanbul ignore else: assertion */
-  if (!body) {
+  if (!body || bodyLength === 0) {
     if (contentLength === 0) {
       socket.write("".concat(header, "content-length: 0\r\n\r\n"), 'latin1');
     } else {
@@ -9938,6 +8455,8 @@ function writeH2(client, session, request) {
   if (request.aborted) {
     return false;
   }
+
+  /** @type {import('node:http2').ClientHttp2Stream} */
   var stream;
   var h2State = client[kHTTP2SessionState];
   headers[HTTP2_HEADER_AUTHORITY] = host || client[kHost];
@@ -10001,7 +8520,10 @@ function writeH2(client, session, request) {
 
     contentLength = null;
   }
-  if (request.contentLength != null && request.contentLength !== contentLength) {
+
+  // https://github.com/nodejs/undici/issues/2046
+  // A user agent may send a Content-Length header with 0 value, this should be allowed.
+  if (shouldSendContentLength(method) && contentLength > 0 && request.contentLength != null && request.contentLength !== contentLength) {
     if (client[kStrictContentLength]) {
       errorRequest(client, request, new RequestContentLengthMismatchError());
       return false;
@@ -10016,16 +8538,12 @@ function writeH2(client, session, request) {
   var shouldEndStream = method === 'GET' || method === 'HEAD';
   if (expectContinue) {
     headers[HTTP2_HEADER_EXPECT] = '100-continue';
-    /**
-     * @type {import('node:http2').ClientHttp2Stream}
-     */
     stream = session.request(headers, {
       endStream: shouldEndStream,
       signal: signal
     });
     stream.once('continue', writeBodyH2);
   } else {
-    /** @type {import('node:http2').ClientHttp2Stream} */
     stream = session.request(headers, {
       endStream: shouldEndStream,
       signal: signal
@@ -10036,7 +8554,9 @@ function writeH2(client, session, request) {
   // Increment counter as we have new several streams open
   ++h2State.openStreams;
   stream.once('response', function (headers) {
-    if (request.onHeaders(Number(headers[HTTP2_HEADER_STATUS]), headers, stream.resume.bind(stream), '') === false) {
+    var statusCode = headers[HTTP2_HEADER_STATUS],
+      realHeaders = _objectWithoutProperties(headers, [HTTP2_HEADER_STATUS].map(_toPropertyKey));
+    if (request.onHeaders(Number(statusCode), realHeaders, stream.resume.bind(stream), '') === false) {
       stream.pause();
     }
   });
@@ -10206,7 +8726,13 @@ function writeStream(_ref3) {
     }
   };
   var onAbort = function onAbort() {
-    onFinished(new RequestAbortedError());
+    if (finished) {
+      return;
+    }
+    var err = new RequestAbortedError();
+    queueMicrotask(function () {
+      return onFinished(err);
+    });
   };
   var onFinished = function onFinished(err) {
     if (finished) {
@@ -12023,6 +10549,26 @@ var ResponseExceededMaxSizeError = /*#__PURE__*/function (_UndiciError17) {
   }
   return _createClass(ResponseExceededMaxSizeError);
 }(UndiciError);
+var RequestRetryError = /*#__PURE__*/function (_UndiciError18) {
+  _inherits(RequestRetryError, _UndiciError18);
+  var _super20 = _createSuper(RequestRetryError);
+  function RequestRetryError(message, code, _ref) {
+    var _this20;
+    var headers = _ref.headers,
+      data = _ref.data;
+    _classCallCheck(this, RequestRetryError);
+    _this20 = _super20.call(this, message);
+    Error.captureStackTrace(_assertThisInitialized(_this20), RequestRetryError);
+    _this20.name = 'RequestRetryError';
+    _this20.message = message || 'Request retry error';
+    _this20.code = 'UND_ERR_REQ_RETRY';
+    _this20.statusCode = code;
+    _this20.data = data;
+    _this20.headers = headers;
+    return _this20;
+  }
+  return _createClass(RequestRetryError);
+}(UndiciError);
 module.exports = {
   HTTPParserError: HTTPParserError,
   UndiciError: UndiciError,
@@ -12042,7 +10588,8 @@ module.exports = {
   NotSupportedError: NotSupportedError,
   ResponseContentLengthMismatchError: ResponseContentLengthMismatchError,
   BalancedPoolMissingUpstreamError: BalancedPoolMissingUpstreamError,
-  ResponseExceededMaxSizeError: ResponseExceededMaxSizeError
+  ResponseExceededMaxSizeError: ResponseExceededMaxSizeError,
+  RequestRetryError: RequestRetryError
 };
 
 /***/ }),
@@ -12117,6 +10664,7 @@ try {
 }
 var Request = /*#__PURE__*/function () {
   function Request(origin, _ref, handler) {
+    var _this = this;
     var path = _ref.path,
       method = _ref.method,
       body = _ref.body,
@@ -12162,10 +10710,26 @@ var Request = /*#__PURE__*/function () {
     this.bodyTimeout = bodyTimeout;
     this.throwOnError = throwOnError === true;
     this.method = method;
+    this.abort = null;
     if (body == null) {
       this.body = null;
     } else if (util.isStream(body)) {
       this.body = body;
+      var rState = this.body._readableState;
+      if (!rState || !rState.autoDestroy) {
+        this.endHandler = function autoDestroy() {
+          util.destroy(this);
+        };
+        this.body.on('end', this.endHandler);
+      }
+      this.errorHandler = function (err) {
+        if (_this.abort) {
+          _this.abort(err);
+        } else {
+          _this.error = err;
+        }
+      };
+      this.body.on('error', this.errorHandler);
     } else if (util.isBuffer(body)) {
       this.body = body.byteLength ? body : null;
     } else if (ArrayBuffer.isView(body)) {
@@ -12244,11 +10808,7 @@ var Request = /*#__PURE__*/function () {
     key: "onBodySent",
     value: function onBodySent(chunk) {
       if (this[kHandler].onBodySent) {
-        try {
-          this[kHandler].onBodySent(chunk);
-        } catch (err) {
-          this.onError(err);
-        }
+        return this[kHandler].onBodySent(chunk);
       }
     }
   }, {
@@ -12259,13 +10819,21 @@ var Request = /*#__PURE__*/function () {
           request: this
         });
       }
+      if (this[kHandler].onRequestSent) {
+        return this[kHandler].onRequestSent();
+      }
     }
   }, {
     key: "onConnect",
     value: function onConnect(abort) {
       assert(!this.aborted);
       assert(!this.completed);
-      return this[kHandler].onConnect(abort);
+      if (this.error) {
+        abort(this.error);
+      } else {
+        this.abort = abort;
+        return this[kHandler].onConnect(abort);
+      }
     }
   }, {
     key: "onHeaders",
@@ -12301,6 +10869,7 @@ var Request = /*#__PURE__*/function () {
   }, {
     key: "onComplete",
     value: function onComplete(trailers) {
+      this.onFinally();
       assert(!this.aborted);
       this.completed = true;
       if (channels.trailers.hasSubscribers) {
@@ -12314,6 +10883,7 @@ var Request = /*#__PURE__*/function () {
   }, {
     key: "onError",
     value: function onError(error) {
+      this.onFinally();
       if (channels.error.hasSubscribers) {
         channels.error.publish({
           request: this,
@@ -12325,6 +10895,18 @@ var Request = /*#__PURE__*/function () {
       }
       this.aborted = true;
       return this[kHandler].onError(error);
+    }
+  }, {
+    key: "onFinally",
+    value: function onFinally() {
+      if (this.errorHandler) {
+        this.body.off('error', this.errorHandler);
+        this.errorHandler = null;
+      }
+      if (this.endHandler) {
+        this.body.off('end', this.endHandler);
+        this.endHandler = null;
+      }
     }
 
     // TODO: adjust to support H2
@@ -12523,7 +11105,8 @@ module.exports = {
   kHTTP2BuildRequest: Symbol('http2 build request'),
   kHTTP1BuildRequest: Symbol('http1 build request'),
   kHTTP2CopyHeaders: Symbol('http2 copy headers'),
-  kHTTPConnVersion: Symbol('http connection version')
+  kHTTPConnVersion: Symbol('http connection version'),
+  kRetryHandlerDefaultRetry: Symbol('retry agent default retry')
 };
 
 /***/ }),
@@ -12638,11 +11221,11 @@ function getHostname(host) {
   if (host[0] === '[') {
     var _idx = host.indexOf(']');
     assert(_idx !== -1);
-    return host.substr(1, _idx - 1);
+    return host.substring(1, _idx);
   }
   var idx = host.indexOf(':');
   if (idx === -1) return host;
-  return host.substr(0, idx);
+  return host.substring(0, idx);
 }
 
 // IP addresses are not valid server names per RFC6066
@@ -12688,7 +11271,7 @@ function isReadableAborted(stream) {
   return isDestroyed(stream) && state && !state.endEmitted;
 }
 function destroy(stream, err) {
-  if (!isStream(stream) || isDestroyed(stream)) {
+  if (stream == null || !isStream(stream) || isDestroyed(stream)) {
     return;
   }
   if (typeof stream.destroy === 'function') {
@@ -12720,7 +11303,9 @@ function parseHeaders(headers) {
     var val = obj[key];
     if (!val) {
       if (Array.isArray(headers[i + 1])) {
-        obj[key] = headers[i + 1];
+        obj[key] = headers[i + 1].map(function (x) {
+          return x.toString('utf8');
+        });
       } else {
         obj[key] = headers[i + 1].toString('utf8');
       }
@@ -12972,16 +11557,7 @@ function throwIfAborted(signal) {
     }
   }
 }
-var events;
 function addAbortListener(signal, listener) {
-  if (typeof Symbol.dispose === 'symbol') {
-    if (!events) {
-      events = __webpack_require__(2361);
-    }
-    if (typeof events.addAbortListener === 'function' && 'aborted' in signal) {
-      return events.addAbortListener(signal, listener);
-    }
-  }
   if ('addEventListener' in signal) {
     signal.addEventListener('abort', listener, {
       once: true
@@ -13007,6 +11583,22 @@ function toUSVString(val) {
     return nodeUtil.toUSVString(val);
   }
   return "".concat(val);
+}
+
+// Parsed accordingly to RFC 9110
+// https://www.rfc-editor.org/rfc/rfc9110#field.content-range
+function parseRangeHeader(range) {
+  if (range == null || range === '') return {
+    start: 0,
+    end: null,
+    size: null
+  };
+  var m = range ? range.match(/^bytes (\d+)-(\d+)\/(\d+)?$/) : null;
+  return m ? {
+    start: parseInt(m[1]),
+    end: m[2] ? parseInt(m[2]) : null,
+    size: m[3] ? parseInt(m[3]) : null
+  } : null;
 }
 var kEnumerableProperty = Object.create(null);
 kEnumerableProperty.enumerable = true;
@@ -13040,9 +11632,11 @@ module.exports = {
   buildURL: buildURL,
   throwIfAborted: throwIfAborted,
   addAbortListener: addAbortListener,
+  parseRangeHeader: parseRangeHeader,
   nodeMajor: nodeMajor,
   nodeMinor: nodeMinor,
-  nodeHasAutoSelectFamily: nodeMajor > 18 || nodeMajor === 18 && nodeMinor >= 13
+  nodeHasAutoSelectFamily: nodeMajor > 18 || nodeMajor === 18 && nodeMinor >= 13,
+  safeHTTPMethods: ['GET', 'HEAD', 'OPTIONS', 'TRACE']
 };
 
 /***/ }),
@@ -13305,7 +11899,7 @@ var _wrapAsyncGenerator = (__webpack_require__(8186)["default"]);
 var _awaitAsyncGenerator = (__webpack_require__(6737)["default"]);
 var _asyncGeneratorDelegate = (__webpack_require__(8131)["default"]);
 var _asyncIterator = (__webpack_require__(8237)["default"]);
-var Busboy = __webpack_require__(1647);
+var Busboy = __webpack_require__(7988);
 var util = __webpack_require__(3902);
 var _require = __webpack_require__(6030),
   ReadableStreamFrom = _require.ReadableStreamFrom,
@@ -13343,6 +11937,8 @@ var ReadableStream = globalThis.ReadableStream;
 
 /** @type {globalThis['File']} */
 var File = NativeFile !== null && NativeFile !== void 0 ? NativeFile : UndiciFile;
+var textEncoder = new TextEncoder();
+var textDecoder = new TextDecoder();
 
 // https://fetch.spec.whatwg.org/#concept-bodyinit-extract
 function extractBody(object) {
@@ -13370,7 +11966,7 @@ function extractBody(object) {
           return _regeneratorRuntime().wrap(function _callee$(_context) {
             while (1) switch (_context.prev = _context.next) {
               case 0:
-                controller.enqueue(typeof source === 'string' ? new TextEncoder().encode(source) : source);
+                controller.enqueue(typeof source === 'string' ? textEncoder.encode(source) : source);
                 queueMicrotask(function () {
                   return readableStreamClose(controller);
                 });
@@ -13450,7 +12046,6 @@ function extractBody(object) {
     // - That the content-length is calculated in advance.
     // - And that all parts are pre-encoded and ready to be sent.
 
-    var enc = new TextEncoder();
     var blobParts = [];
     var rn = new Uint8Array([13, 10]); // '\r\n'
     length = 0;
@@ -13463,11 +12058,11 @@ function extractBody(object) {
           name = _step3$value[0],
           value = _step3$value[1];
         if (typeof value === 'string') {
-          var _chunk = enc.encode(prefix + "; name=\"".concat(_escape(normalizeLinefeeds(name)), "\"") + "\r\n\r\n".concat(normalizeLinefeeds(value), "\r\n"));
+          var _chunk = textEncoder.encode(prefix + "; name=\"".concat(_escape(normalizeLinefeeds(name)), "\"") + "\r\n\r\n".concat(normalizeLinefeeds(value), "\r\n"));
           blobParts.push(_chunk);
           length += _chunk.byteLength;
         } else {
-          var _chunk2 = enc.encode("".concat(prefix, "; name=\"").concat(_escape(normalizeLinefeeds(name)), "\"") + (value.name ? "; filename=\"".concat(_escape(value.name), "\"") : '') + '\r\n' + "Content-Type: ".concat(value.type || 'application/octet-stream', "\r\n\r\n"));
+          var _chunk2 = textEncoder.encode("".concat(prefix, "; name=\"").concat(_escape(normalizeLinefeeds(name)), "\"") + (value.name ? "; filename=\"".concat(_escape(value.name), "\"") : '') + '\r\n' + "Content-Type: ".concat(value.type || 'application/octet-stream', "\r\n\r\n"));
           blobParts.push(_chunk2, value, rn);
           if (typeof value.size === 'number') {
             length += _chunk2.byteLength + value.size + rn.byteLength;
@@ -13481,7 +12076,7 @@ function extractBody(object) {
     } finally {
       _iterator3.f();
     }
-    var chunk = enc.encode("--".concat(boundary, "--"));
+    var chunk = textEncoder.encode("--".concat(boundary, "--"));
     blobParts.push(chunk);
     length += chunk.byteLength;
     if (hasUnknownSizeValue) {
@@ -13797,7 +12392,7 @@ function bodyMixinMethods(instance) {
     formData: function formData() {
       var _this2 = this;
       return _asyncToGenerator( /*#__PURE__*/_regeneratorRuntime().mark(function _callee7() {
-        var contentType, headers, _iterator4, _step4, _step4$value, key, value, responseFormData, busboy, busboyResolve, _iteratorAbruptCompletion, _didIteratorError, _iteratorError, _iterator, _step, chunk, entries, text, textDecoder, _iteratorAbruptCompletion2, _didIteratorError2, _iteratorError2, _iterator2, _step2, _chunk3, formData, _iterator5, _step5, _step5$value, name, _value;
+        var contentType, headers, _iterator4, _step4, _step4$value, key, value, responseFormData, busboy, busboyResolve, _iteratorAbruptCompletion, _didIteratorError, _iteratorError, _iterator, _step, chunk, entries, text, streamingDecoder, _iteratorAbruptCompletion2, _didIteratorError2, _iteratorError2, _iterator2, _step2, _chunk3, formData, _iterator5, _step5, _step5$value, name, _value;
         return _regeneratorRuntime().wrap(function _callee7$(_context7) {
           while (1) switch (_context7.prev = _context7.next) {
             case 0:
@@ -13933,7 +12528,8 @@ function bodyMixinMethods(instance) {
               _context7.prev = 54;
               text = ''; // application/x-www-form-urlencoded parser will keep the BOM.
               // https://url.spec.whatwg.org/#concept-urlencoded-parser
-              textDecoder = new TextDecoder('utf-8', {
+              // Note that streaming decoder is stateful and cannot be reused
+              streamingDecoder = new TextDecoder('utf-8', {
                 ignoreBOM: true
               });
               _iteratorAbruptCompletion2 = false;
@@ -13955,7 +12551,7 @@ function bodyMixinMethods(instance) {
               }
               throw new TypeError('Expected Uint8Array chunk');
             case 67:
-              text += textDecoder.decode(_chunk3, {
+              text += streamingDecoder.decode(_chunk3, {
                 stream: true
               });
             case 68:
@@ -13991,7 +12587,7 @@ function bodyMixinMethods(instance) {
             case 86:
               return _context7.finish(77);
             case 87:
-              text += textDecoder.decode();
+              text += streamingDecoder.decode();
               entries = new URLSearchParams(text);
               _context7.next = 94;
               break;
@@ -14129,7 +12725,7 @@ function utf8DecodeBytes(buffer) {
 
   // 3. Process a queue with an instance of UTF-8’s
   //    decoder, ioQueue, output, and "replacement".
-  var output = new TextDecoder().decode(buffer);
+  var output = textDecoder.decode(buffer);
 
   // 4. Return output.
   return output;
@@ -14175,16 +12771,21 @@ var _require = __webpack_require__(1267),
   MessageChannel = _require.MessageChannel,
   receiveMessageOnPort = _require.receiveMessageOnPort;
 var corsSafeListedMethods = ['GET', 'HEAD', 'POST'];
+var corsSafeListedMethodsSet = new Set(corsSafeListedMethods);
 var nullBodyStatus = [101, 204, 205, 304];
 var redirectStatus = [301, 302, 303, 307, 308];
+var redirectStatusSet = new Set(redirectStatus);
 
 // https://fetch.spec.whatwg.org/#block-bad-port
 var badPorts = ['1', '7', '9', '11', '13', '15', '17', '19', '20', '21', '22', '23', '25', '37', '42', '43', '53', '69', '77', '79', '87', '95', '101', '102', '103', '104', '109', '110', '111', '113', '115', '117', '119', '123', '135', '137', '139', '143', '161', '179', '389', '427', '465', '512', '513', '514', '515', '526', '530', '531', '532', '540', '548', '554', '556', '563', '587', '601', '636', '989', '990', '993', '995', '1719', '1720', '1723', '2049', '3659', '4045', '5060', '5061', '6000', '6566', '6665', '6666', '6667', '6668', '6669', '6697', '10080'];
+var badPortsSet = new Set(badPorts);
 
 // https://w3c.github.io/webappsec-referrer-policy/#referrer-policies
 var referrerPolicy = ['', 'no-referrer', 'no-referrer-when-downgrade', 'same-origin', 'origin', 'strict-origin', 'origin-when-cross-origin', 'strict-origin-when-cross-origin', 'unsafe-url'];
+var referrerPolicySet = new Set(referrerPolicy);
 var requestRedirect = ['follow', 'manual', 'error'];
 var safeMethods = ['GET', 'HEAD', 'OPTIONS', 'TRACE'];
+var safeMethodsSet = new Set(safeMethods);
 var requestMode = ['navigate', 'same-origin', 'no-cors', 'cors'];
 var requestCredentials = ['omit', 'same-origin', 'include'];
 var requestCache = ['default', 'no-store', 'reload', 'no-cache', 'force-cache', 'only-if-cached'];
@@ -14202,7 +12803,9 @@ var requestDuplex = ['half'];
 
 // http://fetch.spec.whatwg.org/#forbidden-method
 var forbiddenMethods = ['CONNECT', 'TRACE', 'TRACK'];
+var forbiddenMethodsSet = new Set(forbiddenMethods);
 var subresource = ['audio', 'audioworklet', 'font', 'image', 'manifest', 'paintworklet', 'script', 'style', 'track', 'video', 'xslt', ''];
+var subresourceSet = new Set(subresource);
 
 /** @type {globalThis['DOMException']} */
 var DOMException = (_globalThis$DOMExcept = globalThis.DOMException) !== null && _globalThis$DOMExcept !== void 0 ? _globalThis$DOMExcept : function () {
@@ -14249,7 +12852,14 @@ module.exports = {
   nullBodyStatus: nullBodyStatus,
   safeMethods: safeMethods,
   badPorts: badPorts,
-  requestDuplex: requestDuplex
+  requestDuplex: requestDuplex,
+  subresourceSet: subresourceSet,
+  badPortsSet: badPortsSet,
+  redirectStatusSet: redirectStatusSet,
+  corsSafeListedMethodsSet: corsSafeListedMethodsSet,
+  safeMethodsSet: safeMethodsSet,
+  forbiddenMethodsSet: forbiddenMethodsSet,
+  referrerPolicySet: referrerPolicySet
 };
 
 /***/ }),
@@ -14881,7 +13491,6 @@ var _classCallCheck = (__webpack_require__(6690)["default"]);
 var _createClass = (__webpack_require__(9728)["default"]);
 var _inherits = (__webpack_require__(1655)["default"]);
 var _createSuper = (__webpack_require__(6389)["default"]);
-var _Object$definePropert;
 var _require = __webpack_require__(4300),
   Blob = _require.Blob,
   NativeFile = _require.File;
@@ -14898,6 +13507,7 @@ var _require6 = __webpack_require__(645),
   serializeAMimeType = _require6.serializeAMimeType;
 var _require7 = __webpack_require__(3902),
   kEnumerableProperty = _require7.kEnumerableProperty;
+var encoder = new TextEncoder();
 var File = /*#__PURE__*/function (_Blob) {
   _inherits(File, _Blob);
   var _super = _createSuper(File);
@@ -15100,10 +13710,10 @@ var FileLike = /*#__PURE__*/function (_Symbol$toStringTag) {
   }]);
   return FileLike;
 }(Symbol.toStringTag);
-Object.defineProperties(File.prototype, (_Object$definePropert = {}, _defineProperty(_Object$definePropert, Symbol.toStringTag, {
+Object.defineProperties(File.prototype, _defineProperty(_defineProperty(_defineProperty({}, Symbol.toStringTag, {
   value: 'File',
   configurable: true
-}), _defineProperty(_Object$definePropert, "name", kEnumerableProperty), _defineProperty(_Object$definePropert, "lastModified", kEnumerableProperty), _Object$definePropert));
+}), "name", kEnumerableProperty), "lastModified", kEnumerableProperty));
 webidl.converters.Blob = webidl.interfaceConverter(Blob);
 webidl.converters.BlobPart = function (V, opts) {
   if (webidl.util.Type(V) === 'Object') {
@@ -15173,7 +13783,7 @@ function processBlobParts(parts, options) {
         }
 
         // 3. Append the result of UTF-8 encoding s to bytes.
-        bytes.push(new TextEncoder().encode(s));
+        bytes.push(encoder.encode(s));
       } else if (types.isAnyArrayBuffer(element) || types.isTypedArray(element)) {
         // 2. If element is a BufferSource, get a copy of the
         //    bytes held by the buffer source, and append those
@@ -15591,14 +14201,13 @@ module.exports = {
 
 
 
-var _toConsumableArray = (__webpack_require__(861)["default"]);
 var _regeneratorRuntime = (__webpack_require__(7061)["default"]);
+var _slicedToArray = (__webpack_require__(7424)["default"]);
+var _createForOfIteratorHelper = (__webpack_require__(4704)["default"]);
+var _toConsumableArray = (__webpack_require__(861)["default"]);
 var _classCallCheck = (__webpack_require__(6690)["default"]);
 var _createClass = (__webpack_require__(9728)["default"]);
 var _defineProperty = (__webpack_require__(8416)["default"]);
-var _slicedToArray = (__webpack_require__(7424)["default"]);
-var _createForOfIteratorHelper = (__webpack_require__(4704)["default"]);
-var _Object$definePropert;
 var _Symbol$iterator;
 var _require = __webpack_require__(3329),
   kHeadersList = _require.kHeadersList;
@@ -15617,6 +14226,13 @@ var kHeadersMap = Symbol('headers map');
 var kHeadersSortedMap = Symbol('headers map sorted');
 
 /**
+ * @param {number} code
+ */
+function isHTTPWhiteSpaceCharCode(code) {
+  return code === 0x00a || code === 0x00d || code === 0x009 || code === 0x020;
+}
+
+/**
  * @see https://fetch.spec.whatwg.org/#concept-header-value-normalize
  * @param {string} potentialValue
  */
@@ -15624,12 +14240,11 @@ function headerValueNormalize(potentialValue) {
   //  To normalize a byte sequence potentialValue, remove
   //  any leading and trailing HTTP whitespace bytes from
   //  potentialValue.
-
-  // Trimming the end with `.replace()` and a RegExp is typically subject to
-  // ReDoS. This is safer and faster.
-  var i = potentialValue.length;
-  while (/[\r\n\t ]/.test(potentialValue.charAt(--i)));
-  return potentialValue.slice(0, i + 1).replace(/^[\r\n\t ]+/, '');
+  var i = 0;
+  var j = potentialValue.length;
+  while (j > i && isHTTPWhiteSpaceCharCode(potentialValue.charCodeAt(j - 1))) --j;
+  while (j > i && isHTTPWhiteSpaceCharCode(potentialValue.charCodeAt(i))) ++i;
+  return i === 0 && j === potentialValue.length ? potentialValue : potentialValue.substring(i, j);
 }
 function fill(headers, object) {
   // To fill a Headers object headers with a given object object, run these steps:
@@ -15637,37 +14252,27 @@ function fill(headers, object) {
   // 1. If object is a sequence, then for each header in object:
   // Note: webidl conversion to array has already been done.
   if (Array.isArray(object)) {
-    var _iterator = _createForOfIteratorHelper(object),
-      _step;
-    try {
-      for (_iterator.s(); !(_step = _iterator.n()).done;) {
-        var header = _step.value;
-        // 1. If header does not contain exactly two items, then throw a TypeError.
-        if (header.length !== 2) {
-          throw webidl.errors.exception({
-            header: 'Headers constructor',
-            message: "expected name/value pair to be length 2, found ".concat(header.length, ".")
-          });
-        }
-
-        // 2. Append (header’s first item, header’s second item) to headers.
-        headers.append(header[0], header[1]);
+    for (var i = 0; i < object.length; ++i) {
+      var header = object[i];
+      // 1. If header does not contain exactly two items, then throw a TypeError.
+      if (header.length !== 2) {
+        throw webidl.errors.exception({
+          header: 'Headers constructor',
+          message: "expected name/value pair to be length 2, found ".concat(header.length, ".")
+        });
       }
-    } catch (err) {
-      _iterator.e(err);
-    } finally {
-      _iterator.f();
+
+      // 2. Append (header’s first item, header’s second item) to headers.
+      appendHeader(headers, header[0], header[1]);
     }
   } else if (typeof object === 'object' && object !== null) {
     // Note: null should throw
 
     // 2. Otherwise, object is a record, then for each key → value in object,
     //    append (key, value) to headers
-    for (var _i = 0, _Object$entries = Object.entries(object); _i < _Object$entries.length; _i++) {
-      var _Object$entries$_i = _slicedToArray(_Object$entries[_i], 2),
-        key = _Object$entries$_i[0],
-        value = _Object$entries$_i[1];
-      headers.append(key, value);
+    var keys = Object.keys(object);
+    for (var _i = 0; _i < keys.length; ++_i) {
+      appendHeader(headers, keys[_i], object[keys[_i]]);
     }
   } else {
     throw webidl.errors.conversionFailed({
@@ -15676,6 +14281,50 @@ function fill(headers, object) {
       types: ['sequence<sequence<ByteString>>', 'record<ByteString, ByteString>']
     });
   }
+}
+
+/**
+ * @see https://fetch.spec.whatwg.org/#concept-headers-append
+ */
+function appendHeader(headers, name, value) {
+  // 1. Normalize value.
+  value = headerValueNormalize(value);
+
+  // 2. If name is not a header name or value is not a
+  //    header value, then throw a TypeError.
+  if (!isValidHeaderName(name)) {
+    throw webidl.errors.invalidArgument({
+      prefix: 'Headers.append',
+      value: name,
+      type: 'header name'
+    });
+  } else if (!isValidHeaderValue(value)) {
+    throw webidl.errors.invalidArgument({
+      prefix: 'Headers.append',
+      value: value,
+      type: 'header value'
+    });
+  }
+
+  // 3. If headers’s guard is "immutable", then throw a TypeError.
+  // 4. Otherwise, if headers’s guard is "request" and name is a
+  //    forbidden header name, return.
+  // Note: undici does not implement forbidden header names
+  if (headers[kGuard] === 'immutable') {
+    throw new TypeError('immutable');
+  } else if (headers[kGuard] === 'request-no-cors') {
+    // 5. Otherwise, if headers’s guard is "request-no-cors":
+    // TODO
+  }
+
+  // 6. Otherwise, if headers’s guard is "response" and name is a
+  //    forbidden response-header name, return.
+
+  // 7. Append (name, value) to headers’s header list.
+  return headers[kHeadersList].append(name, value);
+
+  // 8. If headers’s guard is "request-no-cors", then remove
+  //    privileged no-CORS request headers from headers
 }
 _Symbol$iterator = Symbol.iterator;
 var HeadersList = /*#__PURE__*/function () {
@@ -15686,7 +14335,7 @@ var HeadersList = /*#__PURE__*/function () {
     if (init instanceof HeadersList) {
       this[kHeadersMap] = new Map(init[kHeadersMap]);
       this[kHeadersSortedMap] = init[kHeadersSortedMap];
-      this.cookies = init.cookies;
+      this.cookies = init.cookies === null ? null : _toConsumableArray(init.cookies);
     } else {
       this[kHeadersMap] = new Map(init);
       this[kHeadersSortedMap] = null;
@@ -15756,7 +14405,7 @@ var HeadersList = /*#__PURE__*/function () {
       //    the first such header to value and remove the
       //    others.
       // 2. Otherwise, append header (name, value) to list.
-      return this[kHeadersMap].set(lowercaseName, {
+      this[kHeadersMap].set(lowercaseName, {
         name: name,
         value: value
       });
@@ -15771,41 +14420,38 @@ var HeadersList = /*#__PURE__*/function () {
       if (name === 'set-cookie') {
         this.cookies = null;
       }
-      return this[kHeadersMap]["delete"](name);
+      this[kHeadersMap]["delete"](name);
     }
 
     // https://fetch.spec.whatwg.org/#concept-header-list-get
   }, {
     key: "get",
     value: function get(name) {
-      var _this$kHeadersMap$get, _this$kHeadersMap$get2;
-      // 1. If list does not contain name, then return null.
-      if (!this.contains(name)) {
-        return null;
-      }
+      var value = this[kHeadersMap].get(name.toLowerCase());
 
+      // 1. If list does not contain name, then return null.
       // 2. Return the values of all headers in list whose name
       //    is a byte-case-insensitive match for name,
       //    separated from each other by 0x2C 0x20, in order.
-      return (_this$kHeadersMap$get = (_this$kHeadersMap$get2 = this[kHeadersMap].get(name.toLowerCase())) === null || _this$kHeadersMap$get2 === void 0 ? void 0 : _this$kHeadersMap$get2.value) !== null && _this$kHeadersMap$get !== void 0 ? _this$kHeadersMap$get : null;
+      return value === undefined ? null : value.value;
     }
   }, {
     key: _Symbol$iterator,
     value: /*#__PURE__*/_regeneratorRuntime().mark(function value() {
-      var _iterator2, _step2, _step2$value, name, value;
+      var _iterator, _step, _step$value, name, value;
       return _regeneratorRuntime().wrap(function value$(_context) {
         while (1) switch (_context.prev = _context.next) {
           case 0:
             // use the lowercased name
-            _iterator2 = _createForOfIteratorHelper(this[kHeadersMap]);
+            _iterator = _createForOfIteratorHelper(this[kHeadersMap]);
             _context.prev = 1;
-            _iterator2.s();
+            _iterator.s();
           case 3:
-            if ((_step2 = _iterator2.n()).done) {
+            if ((_step = _iterator.n()).done) {
               _context.next = 9;
               break;
             }
-            _step2$value = _slicedToArray(_step2.value, 2), name = _step2$value[0], value = _step2$value[1].value;
+            _step$value = _slicedToArray(_step.value, 2), name = _step$value[0], value = _step$value[1].value;
             _context.next = 7;
             return [name, value];
           case 7:
@@ -15817,10 +14463,10 @@ var HeadersList = /*#__PURE__*/function () {
           case 11:
             _context.prev = 11;
             _context.t0 = _context["catch"](1);
-            _iterator2.e(_context.t0);
+            _iterator.e(_context.t0);
           case 14:
             _context.prev = 14;
-            _iterator2.f();
+            _iterator.f();
             return _context.finish(14);
           case 17:
           case "end":
@@ -15833,19 +14479,19 @@ var HeadersList = /*#__PURE__*/function () {
     get: function get() {
       var headers = {};
       if (this[kHeadersMap].size) {
-        var _iterator3 = _createForOfIteratorHelper(this[kHeadersMap].values()),
-          _step3;
+        var _iterator2 = _createForOfIteratorHelper(this[kHeadersMap].values()),
+          _step2;
         try {
-          for (_iterator3.s(); !(_step3 = _iterator3.n()).done;) {
-            var _step3$value = _step3.value,
-              name = _step3$value.name,
-              value = _step3$value.value;
+          for (_iterator2.s(); !(_step2 = _iterator2.n()).done;) {
+            var _step2$value = _step2.value,
+              name = _step2$value.name,
+              value = _step2$value.value;
             headers[name] = value;
           }
         } catch (err) {
-          _iterator3.e(err);
+          _iterator2.e(err);
         } finally {
-          _iterator3.f();
+          _iterator2.f();
         }
       }
       return headers;
@@ -15881,44 +14527,7 @@ var Headers = /*#__PURE__*/function (_Symbol$for) {
       });
       name = webidl.converters.ByteString(name);
       value = webidl.converters.ByteString(value);
-
-      // 1. Normalize value.
-      value = headerValueNormalize(value);
-
-      // 2. If name is not a header name or value is not a
-      //    header value, then throw a TypeError.
-      if (!isValidHeaderName(name)) {
-        throw webidl.errors.invalidArgument({
-          prefix: 'Headers.append',
-          value: name,
-          type: 'header name'
-        });
-      } else if (!isValidHeaderValue(value)) {
-        throw webidl.errors.invalidArgument({
-          prefix: 'Headers.append',
-          value: value,
-          type: 'header value'
-        });
-      }
-
-      // 3. If headers’s guard is "immutable", then throw a TypeError.
-      // 4. Otherwise, if headers’s guard is "request" and name is a
-      //    forbidden header name, return.
-      // Note: undici does not implement forbidden header names
-      if (this[kGuard] === 'immutable') {
-        throw new TypeError('immutable');
-      } else if (this[kGuard] === 'request-no-cors') {
-        // 5. Otherwise, if headers’s guard is "request-no-cors":
-        // TODO
-      }
-
-      // 6. Otherwise, if headers’s guard is "response" and name is a
-      //    forbidden response-header name, return.
-
-      // 7. Append (name, value) to headers’s header list.
-      // 8. If headers’s guard is "request-no-cors", then remove
-      //    privileged no-CORS request headers from headers
-      return this[kHeadersList].append(name, value);
+      return appendHeader(this, name, value);
     }
 
     // https://fetch.spec.whatwg.org/#dom-headers-delete
@@ -15965,7 +14574,7 @@ var Headers = /*#__PURE__*/function (_Symbol$for) {
       // 7. Delete name from this’s header list.
       // 8. If this’s guard is "request-no-cors", then remove
       //    privileged no-CORS request headers from this.
-      return this[kHeadersList]["delete"](name);
+      this[kHeadersList]["delete"](name);
     }
 
     // https://fetch.spec.whatwg.org/#dom-headers-get
@@ -16064,7 +14673,7 @@ var Headers = /*#__PURE__*/function (_Symbol$for) {
       // 7. Set (name, value) in this’s header list.
       // 8. If this’s guard is "request-no-cors", then remove
       //    privileged no-CORS request headers from this
-      return this[kHeadersList].set(name, value);
+      this[kHeadersList].set(name, value);
     }
 
     // https://fetch.spec.whatwg.org/#dom-headers-getsetcookie
@@ -16104,47 +14713,31 @@ var Headers = /*#__PURE__*/function (_Symbol$for) {
       var cookies = this[kHeadersList].cookies;
 
       // 3. For each name of names:
-      var _iterator4 = _createForOfIteratorHelper(names),
-        _step4;
-      try {
-        for (_iterator4.s(); !(_step4 = _iterator4.n()).done;) {
-          var _step4$value = _slicedToArray(_step4.value, 2),
-            name = _step4$value[0],
-            value = _step4$value[1];
-          // 1. If name is `set-cookie`, then:
-          if (name === 'set-cookie') {
-            // 1. Let values be a list of all values of headers in list whose name
-            //    is a byte-case-insensitive match for name, in order.
-            // 2. For each value of values:
-            // 1. Append (name, value) to headers.
-            var _iterator5 = _createForOfIteratorHelper(cookies),
-              _step5;
-            try {
-              for (_iterator5.s(); !(_step5 = _iterator5.n()).done;) {
-                var _value = _step5.value;
-                headers.push([name, _value]);
-              }
-            } catch (err) {
-              _iterator5.e(err);
-            } finally {
-              _iterator5.f();
-            }
-          } else {
-            // 2. Otherwise:
+      for (var i = 0; i < names.length; ++i) {
+        var _names$i = _slicedToArray(names[i], 2),
+          name = _names$i[0],
+          value = _names$i[1];
+        // 1. If name is `set-cookie`, then:
+        if (name === 'set-cookie') {
+          // 1. Let values be a list of all values of headers in list whose name
+          //    is a byte-case-insensitive match for name, in order.
 
-            // 1. Let value be the result of getting name from list.
-
-            // 2. Assert: value is non-null.
-            assert(value !== null);
-
-            // 3. Append (name, value) to headers.
-            headers.push([name, value]);
+          // 2. For each value of values:
+          // 1. Append (name, value) to headers.
+          for (var j = 0; j < cookies.length; ++j) {
+            headers.push([name, cookies[j]]);
           }
+        } else {
+          // 2. Otherwise:
+
+          // 1. Let value be the result of getting name from list.
+
+          // 2. Assert: value is non-null.
+          assert(value !== null);
+
+          // 3. Append (name, value) to headers.
+          headers.push([name, value]);
         }
-      } catch (err) {
-        _iterator4.e(err);
-      } finally {
-        _iterator4.f();
       }
       this[kHeadersList][kHeadersSortedMap] = headers;
 
@@ -16156,6 +14749,12 @@ var Headers = /*#__PURE__*/function (_Symbol$for) {
     value: function keys() {
       var _this = this;
       webidl.brandCheck(this, Headers);
+      if (this[kGuard] === 'immutable') {
+        var value = this[kHeadersSortedMap];
+        return makeIterator(function () {
+          return value;
+        }, 'Headers', 'key');
+      }
       return makeIterator(function () {
         return _toConsumableArray(_this[kHeadersSortedMap].values());
       }, 'Headers', 'key');
@@ -16165,6 +14764,12 @@ var Headers = /*#__PURE__*/function (_Symbol$for) {
     value: function values() {
       var _this2 = this;
       webidl.brandCheck(this, Headers);
+      if (this[kGuard] === 'immutable') {
+        var value = this[kHeadersSortedMap];
+        return makeIterator(function () {
+          return value;
+        }, 'Headers', 'value');
+      }
       return makeIterator(function () {
         return _toConsumableArray(_this2[kHeadersSortedMap].values());
       }, 'Headers', 'value');
@@ -16174,6 +14779,12 @@ var Headers = /*#__PURE__*/function (_Symbol$for) {
     value: function entries() {
       var _this3 = this;
       webidl.brandCheck(this, Headers);
+      if (this[kGuard] === 'immutable') {
+        var value = this[kHeadersSortedMap];
+        return makeIterator(function () {
+          return value;
+        }, 'Headers', 'key+value');
+      }
       return makeIterator(function () {
         return _toConsumableArray(_this3[kHeadersSortedMap].values());
       }, 'Headers', 'key+value');
@@ -16194,19 +14805,19 @@ var Headers = /*#__PURE__*/function (_Symbol$for) {
       if (typeof callbackFn !== 'function') {
         throw new TypeError("Failed to execute 'forEach' on 'Headers': parameter 1 is not of type 'Function'.");
       }
-      var _iterator6 = _createForOfIteratorHelper(this),
-        _step6;
+      var _iterator3 = _createForOfIteratorHelper(this),
+        _step3;
       try {
-        for (_iterator6.s(); !(_step6 = _iterator6.n()).done;) {
-          var _step6$value = _slicedToArray(_step6.value, 2),
-            key = _step6$value[0],
-            value = _step6$value[1];
+        for (_iterator3.s(); !(_step3 = _iterator3.n()).done;) {
+          var _step3$value = _slicedToArray(_step3.value, 2),
+            key = _step3$value[0],
+            value = _step3$value[1];
           callbackFn.apply(thisArg, [value, key, this]);
         }
       } catch (err) {
-        _iterator6.e(err);
+        _iterator3.e(err);
       } finally {
-        _iterator6.f();
+        _iterator3.f();
       }
     }
   }, {
@@ -16219,7 +14830,7 @@ var Headers = /*#__PURE__*/function (_Symbol$for) {
   return Headers;
 }(Symbol["for"]('nodejs.util.inspect.custom'));
 Headers.prototype[Symbol.iterator] = Headers.prototype.entries;
-Object.defineProperties(Headers.prototype, (_Object$definePropert = {
+Object.defineProperties(Headers.prototype, _defineProperty(_defineProperty({
   append: kEnumerableProperty,
   "delete": kEnumerableProperty,
   get: kEnumerableProperty,
@@ -16230,12 +14841,12 @@ Object.defineProperties(Headers.prototype, (_Object$definePropert = {
   values: kEnumerableProperty,
   entries: kEnumerableProperty,
   forEach: kEnumerableProperty
-}, _defineProperty(_Object$definePropert, Symbol.iterator, {
+}, Symbol.iterator, {
   enumerable: false
-}), _defineProperty(_Object$definePropert, Symbol.toStringTag, {
+}), Symbol.toStringTag, {
   value: 'Headers',
   configurable: true
-}), _Object$definePropert));
+}));
 webidl.converters.HeadersInit = function (V) {
   if (webidl.util.Type(V) === 'Object') {
     if (V[Symbol.iterator]) {
@@ -16266,9 +14877,9 @@ module.exports = {
 
 
 var _objectSpread = (__webpack_require__(2122)["default"]);
-var _createForOfIteratorHelper = (__webpack_require__(4704)["default"]);
 var _toConsumableArray = (__webpack_require__(861)["default"]);
 var _regeneratorRuntime = (__webpack_require__(7061)["default"]);
+var _createForOfIteratorHelper = (__webpack_require__(4704)["default"]);
 var _asyncToGenerator = (__webpack_require__(7156)["default"]);
 var _classCallCheck = (__webpack_require__(6690)["default"]);
 var _createClass = (__webpack_require__(9728)["default"]);
@@ -16328,11 +14939,11 @@ var assert = __webpack_require__(9491);
 var _require6 = __webpack_require__(2588),
   safelyExtractBody = _require6.safelyExtractBody;
 var _require7 = __webpack_require__(2654),
-  redirectStatus = _require7.redirectStatus,
+  redirectStatusSet = _require7.redirectStatusSet,
   nullBodyStatus = _require7.nullBodyStatus,
-  safeMethods = _require7.safeMethods,
+  safeMethodsSet = _require7.safeMethodsSet,
   requestBodyHeader = _require7.requestBodyHeader,
-  subresource = _require7.subresource,
+  subresourceSet = _require7.subresourceSet,
   DOMException = _require7.DOMException;
 var _require8 = __webpack_require__(3329),
   kHeadersList = _require8.kHeadersList;
@@ -16357,6 +14968,7 @@ var _require14 = __webpack_require__(3441),
   webidl = _require14.webidl;
 var _require15 = __webpack_require__(3685),
   STATUS_CODES = _require15.STATUS_CODES;
+var GET_OR_HEAD = ['GET', 'HEAD'];
 
 /** @type {import('buffer').resolveObjectURL} */
 var resolveObjectURL;
@@ -16422,150 +15034,139 @@ var Fetch = /*#__PURE__*/function (_EE) {
   }]);
   return Fetch;
 }(EE); // https://fetch.spec.whatwg.org/#fetch-method
-function fetch(_x2) {
-  return _fetch.apply(this, arguments);
-} // https://fetch.spec.whatwg.org/#finalize-and-report-timing
-function _fetch() {
-  _fetch = _asyncToGenerator( /*#__PURE__*/_regeneratorRuntime().mark(function _callee(input) {
-    var _globalObject$constru, _init$dispatcher;
-    var init,
-      p,
-      requestObject,
-      request,
-      globalObject,
-      responseObject,
-      relevantRealm,
-      locallyAborted,
-      controller,
-      handleFetchDone,
-      processResponse,
-      _args = arguments;
-    return _regeneratorRuntime().wrap(function _callee$(_context) {
-      while (1) switch (_context.prev = _context.next) {
-        case 0:
-          init = _args.length > 1 && _args[1] !== undefined ? _args[1] : {};
-          webidl.argumentLengthCheck(_args, 1, {
-            header: 'globalThis.fetch'
-          });
+function fetch(input) {
+  var _globalObject$constru, _init$dispatcher;
+  var init = arguments.length > 1 && arguments[1] !== undefined ? arguments[1] : {};
+  webidl.argumentLengthCheck(arguments, 1, {
+    header: 'globalThis.fetch'
+  });
 
-          // 1. Let p be a new promise.
-          p = createDeferredPromise(); // 2. Let requestObject be the result of invoking the initial value of
-          // Request as constructor with input and init as arguments. If this throws
-          // an exception, reject p with it and return p.
-          _context.prev = 3;
-          requestObject = new Request(input, init);
-          _context.next = 11;
-          break;
-        case 7:
-          _context.prev = 7;
-          _context.t0 = _context["catch"](3);
-          p.reject(_context.t0);
-          return _context.abrupt("return", p.promise);
-        case 11:
-          // 3. Let request be requestObject’s request.
-          request = requestObject[kState]; // 4. If requestObject’s signal’s aborted flag is set, then:
-          if (!requestObject.signal.aborted) {
-            _context.next = 15;
-            break;
-          }
-          // 1. Abort the fetch() call with p, request, null, and
-          //    requestObject’s signal’s abort reason.
-          abortFetch(p, request, null, requestObject.signal.reason);
+  // 1. Let p be a new promise.
+  var p = createDeferredPromise();
 
-          // 2. Return p.
-          return _context.abrupt("return", p.promise);
-        case 15:
-          // 5. Let globalObject be request’s client’s global object.
-          globalObject = request.client.globalObject; // 6. If globalObject is a ServiceWorkerGlobalScope object, then set
-          // request’s service-workers mode to "none".
-          if ((globalObject === null || globalObject === void 0 || (_globalObject$constru = globalObject.constructor) === null || _globalObject$constru === void 0 ? void 0 : _globalObject$constru.name) === 'ServiceWorkerGlobalScope') {
-            request.serviceWorkers = 'none';
-          }
+  // 2. Let requestObject be the result of invoking the initial value of
+  // Request as constructor with input and init as arguments. If this throws
+  // an exception, reject p with it and return p.
+  var requestObject;
+  try {
+    requestObject = new Request(input, init);
+  } catch (e) {
+    p.reject(e);
+    return p.promise;
+  }
 
-          // 7. Let responseObject be null.
-          responseObject = null; // 8. Let relevantRealm be this’s relevant Realm.
-          relevantRealm = null; // 9. Let locallyAborted be false.
-          locallyAborted = false; // 10. Let controller be null.
-          controller = null; // 11. Add the following abort steps to requestObject’s signal:
-          addAbortListener(requestObject.signal, function () {
-            // 1. Set locallyAborted to true.
-            locallyAborted = true;
+  // 3. Let request be requestObject’s request.
+  var request = requestObject[kState];
 
-            // 2. Assert: controller is non-null.
-            assert(controller != null);
+  // 4. If requestObject’s signal’s aborted flag is set, then:
+  if (requestObject.signal.aborted) {
+    // 1. Abort the fetch() call with p, request, null, and
+    //    requestObject’s signal’s abort reason.
+    abortFetch(p, request, null, requestObject.signal.reason);
 
-            // 3. Abort controller with requestObject’s signal’s abort reason.
-            controller.abort(requestObject.signal.reason);
+    // 2. Return p.
+    return p.promise;
+  }
 
-            // 4. Abort the fetch() call with p, request, responseObject,
-            //    and requestObject’s signal’s abort reason.
-            abortFetch(p, request, responseObject, requestObject.signal.reason);
-          });
+  // 5. Let globalObject be request’s client’s global object.
+  var globalObject = request.client.globalObject;
 
-          // 12. Let handleFetchDone given response response be to finalize and
-          // report timing with response, globalObject, and "fetch".
-          handleFetchDone = function handleFetchDone(response) {
-            return finalizeAndReportTiming(response, 'fetch');
-          }; // 13. Set controller to the result of calling fetch given request,
-          // with processResponseEndOfBody set to handleFetchDone, and processResponse
-          // given response being these substeps:
-          processResponse = function processResponse(response) {
-            // 1. If locallyAborted is true, terminate these substeps.
-            if (locallyAborted) {
-              return;
-            }
+  // 6. If globalObject is a ServiceWorkerGlobalScope object, then set
+  // request’s service-workers mode to "none".
+  if ((globalObject === null || globalObject === void 0 || (_globalObject$constru = globalObject.constructor) === null || _globalObject$constru === void 0 ? void 0 : _globalObject$constru.name) === 'ServiceWorkerGlobalScope') {
+    request.serviceWorkers = 'none';
+  }
 
-            // 2. If response’s aborted flag is set, then:
-            if (response.aborted) {
-              // 1. Let deserializedError be the result of deserialize a serialized
-              //    abort reason given controller’s serialized abort reason and
-              //    relevantRealm.
+  // 7. Let responseObject be null.
+  var responseObject = null;
 
-              // 2. Abort the fetch() call with p, request, responseObject, and
-              //    deserializedError.
+  // 8. Let relevantRealm be this’s relevant Realm.
+  var relevantRealm = null;
 
-              abortFetch(p, request, responseObject, controller.serializedAbortReason);
-              return;
-            }
+  // 9. Let locallyAborted be false.
+  var locallyAborted = false;
 
-            // 3. If response is a network error, then reject p with a TypeError
-            // and terminate these substeps.
-            if (response.type === 'error') {
-              p.reject(Object.assign(new TypeError('fetch failed'), {
-                cause: response.error
-              }));
-              return;
-            }
+  // 10. Let controller be null.
+  var controller = null;
 
-            // 4. Set responseObject to the result of creating a Response object,
-            // given response, "immutable", and relevantRealm.
-            responseObject = new Response();
-            responseObject[kState] = response;
-            responseObject[kRealm] = relevantRealm;
-            responseObject[kHeaders][kHeadersList] = response.headersList;
-            responseObject[kHeaders][kGuard] = 'immutable';
-            responseObject[kHeaders][kRealm] = relevantRealm;
+  // 11. Add the following abort steps to requestObject’s signal:
+  addAbortListener(requestObject.signal, function () {
+    // 1. Set locallyAborted to true.
+    locallyAborted = true;
 
-            // 5. Resolve p with responseObject.
-            p.resolve(responseObject);
-          };
-          controller = fetching({
-            request: request,
-            processResponseEndOfBody: handleFetchDone,
-            processResponse: processResponse,
-            dispatcher: (_init$dispatcher = init.dispatcher) !== null && _init$dispatcher !== void 0 ? _init$dispatcher : getGlobalDispatcher() // undici
-          });
+    // 2. Assert: controller is non-null.
+    assert(controller != null);
 
-          // 14. Return p.
-          return _context.abrupt("return", p.promise);
-        case 26:
-        case "end":
-          return _context.stop();
-      }
-    }, _callee, null, [[3, 7]]);
-  }));
-  return _fetch.apply(this, arguments);
+    // 3. Abort controller with requestObject’s signal’s abort reason.
+    controller.abort(requestObject.signal.reason);
+
+    // 4. Abort the fetch() call with p, request, responseObject,
+    //    and requestObject’s signal’s abort reason.
+    abortFetch(p, request, responseObject, requestObject.signal.reason);
+  });
+
+  // 12. Let handleFetchDone given response response be to finalize and
+  // report timing with response, globalObject, and "fetch".
+  var handleFetchDone = function handleFetchDone(response) {
+    return finalizeAndReportTiming(response, 'fetch');
+  };
+
+  // 13. Set controller to the result of calling fetch given request,
+  // with processResponseEndOfBody set to handleFetchDone, and processResponse
+  // given response being these substeps:
+
+  var processResponse = function processResponse(response) {
+    // 1. If locallyAborted is true, terminate these substeps.
+    if (locallyAborted) {
+      return Promise.resolve();
+    }
+
+    // 2. If response’s aborted flag is set, then:
+    if (response.aborted) {
+      // 1. Let deserializedError be the result of deserialize a serialized
+      //    abort reason given controller’s serialized abort reason and
+      //    relevantRealm.
+
+      // 2. Abort the fetch() call with p, request, responseObject, and
+      //    deserializedError.
+
+      abortFetch(p, request, responseObject, controller.serializedAbortReason);
+      return Promise.resolve();
+    }
+
+    // 3. If response is a network error, then reject p with a TypeError
+    // and terminate these substeps.
+    if (response.type === 'error') {
+      p.reject(Object.assign(new TypeError('fetch failed'), {
+        cause: response.error
+      }));
+      return Promise.resolve();
+    }
+
+    // 4. Set responseObject to the result of creating a Response object,
+    // given response, "immutable", and relevantRealm.
+    responseObject = new Response();
+    responseObject[kState] = response;
+    responseObject[kRealm] = relevantRealm;
+    responseObject[kHeaders][kHeadersList] = response.headersList;
+    responseObject[kHeaders][kGuard] = 'immutable';
+    responseObject[kHeaders][kRealm] = relevantRealm;
+
+    // 5. Resolve p with responseObject.
+    p.resolve(responseObject);
+  };
+  controller = fetching({
+    request: request,
+    processResponseEndOfBody: handleFetchDone,
+    processResponse: processResponse,
+    dispatcher: (_init$dispatcher = init.dispatcher) !== null && _init$dispatcher !== void 0 ? _init$dispatcher : getGlobalDispatcher() // undici
+  });
+
+  // 14. Return p.
+  return p.promise;
 }
+
+// https://fetch.spec.whatwg.org/#finalize-and-report-timing
 function finalizeAndReportTiming(response) {
   var _response$urlList;
   var initiatorType = arguments.length > 1 && arguments[1] !== undefined ? arguments[1] : 'other';
@@ -16814,7 +15415,7 @@ function fetching(_ref2) {
   }
 
   // 15. If request is a subresource request, then:
-  if (subresource.includes(request.destination)) {
+  if (subresourceSet.has(request.destination)) {
     // TODO
   }
 
@@ -16828,12 +15429,12 @@ function fetching(_ref2) {
 }
 
 // https://fetch.spec.whatwg.org/#concept-main-fetch
-function mainFetch(_x3) {
+function mainFetch(_x2) {
   return _mainFetch.apply(this, arguments);
 } // https://fetch.spec.whatwg.org/#concept-scheme-fetch
 // given a fetch params fetchParams
 function _mainFetch() {
-  _mainFetch = _asyncToGenerator( /*#__PURE__*/_regeneratorRuntime().mark(function _callee3(fetchParams) {
+  _mainFetch = _asyncToGenerator( /*#__PURE__*/_regeneratorRuntime().mark(function _callee2(fetchParams) {
     var recursive,
       request,
       response,
@@ -16841,11 +15442,11 @@ function _mainFetch() {
       _internalResponse$url,
       processBodyError,
       processBody,
-      _args3 = arguments;
-    return _regeneratorRuntime().wrap(function _callee3$(_context3) {
-      while (1) switch (_context3.prev = _context3.next) {
+      _args2 = arguments;
+    return _regeneratorRuntime().wrap(function _callee2$(_context2) {
+      while (1) switch (_context2.prev = _context2.next) {
         case 0:
-          recursive = _args3.length > 1 && _args3[1] !== undefined ? _args3[1] : false;
+          recursive = _args2.length > 1 && _args2[1] !== undefined ? _args2[1] : false;
           // 1. Let request be fetchParams’s request.
           request = fetchParams.request; // 2. Let response be null.
           response = null; // 3. If request’s local-URLs-only flag is set and request’s current URL is
@@ -16897,14 +15498,14 @@ function _mainFetch() {
           // 11. If response is null, then set response to the result of running
           // the steps corresponding to the first matching statement:
           if (!(response === null)) {
-            _context3.next = 12;
+            _context2.next = 12;
             break;
           }
-          _context3.next = 11;
-          return _asyncToGenerator( /*#__PURE__*/_regeneratorRuntime().mark(function _callee2() {
+          _context2.next = 11;
+          return _asyncToGenerator( /*#__PURE__*/_regeneratorRuntime().mark(function _callee() {
             var currentURL;
-            return _regeneratorRuntime().wrap(function _callee2$(_context2) {
-              while (1) switch (_context2.prev = _context2.next) {
+            return _regeneratorRuntime().wrap(function _callee$(_context) {
+              while (1) switch (_context.prev = _context.next) {
                 case 0:
                   currentURL = requestCurrentURL(request);
                   if (!(
@@ -16915,48 +15516,48 @@ function _mainFetch() {
                   currentURL.protocol === 'data:' ||
                   // - request’s mode is "navigate" or "websocket"
                   request.mode === 'navigate' || request.mode === 'websocket')) {
-                    _context2.next = 6;
+                    _context.next = 6;
                     break;
                   }
                   // 1. Set request’s response tainting to "basic".
                   request.responseTainting = 'basic';
 
                   // 2. Return the result of running scheme fetch given fetchParams.
-                  _context2.next = 5;
+                  _context.next = 5;
                   return schemeFetch(fetchParams);
                 case 5:
-                  return _context2.abrupt("return", _context2.sent);
+                  return _context.abrupt("return", _context.sent);
                 case 6:
                   if (!(request.mode === 'same-origin')) {
-                    _context2.next = 8;
+                    _context.next = 8;
                     break;
                   }
-                  return _context2.abrupt("return", makeNetworkError('request mode cannot be "same-origin"'));
+                  return _context.abrupt("return", makeNetworkError('request mode cannot be "same-origin"'));
                 case 8:
                   if (!(request.mode === 'no-cors')) {
-                    _context2.next = 15;
+                    _context.next = 15;
                     break;
                   }
                   if (!(request.redirect !== 'follow')) {
-                    _context2.next = 11;
+                    _context.next = 11;
                     break;
                   }
-                  return _context2.abrupt("return", makeNetworkError('redirect mode cannot be "follow" for "no-cors" request'));
+                  return _context.abrupt("return", makeNetworkError('redirect mode cannot be "follow" for "no-cors" request'));
                 case 11:
                   // 2. Set request’s response tainting to "opaque".
                   request.responseTainting = 'opaque';
 
                   // 3. Return the result of running scheme fetch given fetchParams.
-                  _context2.next = 14;
+                  _context.next = 14;
                   return schemeFetch(fetchParams);
                 case 14:
-                  return _context2.abrupt("return", _context2.sent);
+                  return _context.abrupt("return", _context.sent);
                 case 15:
                   if (urlIsHttpHttpsScheme(requestCurrentURL(request))) {
-                    _context2.next = 17;
+                    _context.next = 17;
                     break;
                   }
-                  return _context2.abrupt("return", makeNetworkError('URL scheme must be a HTTP(S) scheme'));
+                  return _context.abrupt("return", makeNetworkError('URL scheme must be a HTTP(S) scheme'));
                 case 17:
                   // - request’s use-CORS-preflight flag is set
                   // - request’s unsafe-request flag is set and either request’s method is
@@ -16975,24 +15576,24 @@ function _mainFetch() {
                   request.responseTainting = 'cors';
 
                   //    2. Return the result of running HTTP fetch given fetchParams.
-                  _context2.next = 20;
+                  _context.next = 20;
                   return httpFetch(fetchParams);
                 case 20:
-                  return _context2.abrupt("return", _context2.sent);
+                  return _context.abrupt("return", _context.sent);
                 case 21:
                 case "end":
-                  return _context2.stop();
+                  return _context.stop();
               }
-            }, _callee2);
+            }, _callee);
           }))();
         case 11:
-          response = _context3.sent;
+          response = _context2.sent;
         case 12:
           if (!recursive) {
-            _context3.next = 14;
+            _context2.next = 14;
             break;
           }
-          return _context3.abrupt("return", response);
+          return _context2.abrupt("return", response);
         case 14:
           // 13. If response is not a network error and response is not a filtered
           // response, then:
@@ -17065,7 +15666,7 @@ function _mainFetch() {
 
           // 20. If request’s integrity metadata is not the empty string, then:
           if (!request.integrity) {
-            _context3.next = 30;
+            _context2.next = 30;
             break;
           }
           // 1. Let processBodyError be this step: run fetch finale given fetchParams
@@ -17075,11 +15676,11 @@ function _mainFetch() {
           }; // 2. If request’s response tainting is "opaque", or response’s body is null,
           // then run processBodyError and abort these steps.
           if (!(request.responseTainting === 'opaque' || response.body == null)) {
-            _context3.next = 25;
+            _context2.next = 25;
             break;
           }
           processBodyError(response.error);
-          return _context3.abrupt("return");
+          return _context2.abrupt("return");
         case 25:
           // 3. Let processBody given bytes be these steps:
           processBody = function processBody(bytes) {
@@ -17096,128 +15697,148 @@ function _mainFetch() {
             // 3. Run fetch finale given fetchParams and response.
             fetchFinale(fetchParams, response);
           }; // 4. Fully read response’s body given processBody and processBodyError.
-          _context3.next = 28;
+          _context2.next = 28;
           return fullyReadBody(response.body, processBody, processBodyError);
         case 28:
-          _context3.next = 31;
+          _context2.next = 31;
           break;
         case 30:
           // 21. Otherwise, run fetch finale given fetchParams and response.
           fetchFinale(fetchParams, response);
         case 31:
         case "end":
-          return _context3.stop();
+          return _context2.stop();
       }
-    }, _callee3);
+    }, _callee2);
   }));
   return _mainFetch.apply(this, arguments);
 }
-function schemeFetch(_x4) {
-  return _schemeFetch.apply(this, arguments);
-} // https://fetch.spec.whatwg.org/#finalize-response
-function _schemeFetch() {
-  _schemeFetch = _asyncToGenerator( /*#__PURE__*/_regeneratorRuntime().mark(function _callee4(fetchParams) {
-    var request, _requestCurrentURL, scheme, _bodyWithType$, blobURLEntry, blobURLEntryObject, bodyWithType, body, length, type, _response, currentURL, dataURLStruct, mimeType;
-    return _regeneratorRuntime().wrap(function _callee4$(_context4) {
-      while (1) switch (_context4.prev = _context4.next) {
-        case 0:
-          if (!(isCancelled(fetchParams) && fetchParams.request.redirectCount === 0)) {
-            _context4.next = 2;
-            break;
-          }
-          return _context4.abrupt("return", makeAppropriateNetworkError(fetchParams));
-        case 2:
-          // 2. Let request be fetchParams’s request.
-          request = fetchParams.request;
-          _requestCurrentURL = requestCurrentURL(request), scheme = _requestCurrentURL.protocol; // 3. Switch on request’s current URL’s scheme and run the associated steps:
-          _context4.t0 = scheme;
-          _context4.next = _context4.t0 === 'about:' ? 7 : _context4.t0 === 'blob:' ? 8 : _context4.t0 === 'data:' ? 22 : _context4.t0 === 'file:' ? 28 : _context4.t0 === 'http:' ? 29 : _context4.t0 === 'https:' ? 29 : 32;
-          break;
-        case 7:
-          return _context4.abrupt("return", makeNetworkError('about scheme is not supported'));
-        case 8:
-          if (!resolveObjectURL) {
-            resolveObjectURL = (__webpack_require__(4300).resolveObjectURL);
-          }
+function schemeFetch(fetchParams) {
+  // Note: since the connection is destroyed on redirect, which sets fetchParams to a
+  // cancelled state, we do not want this condition to trigger *unless* there have been
+  // no redirects. See https://github.com/nodejs/undici/issues/1776
+  // 1. If fetchParams is canceled, then return the appropriate network error for fetchParams.
+  if (isCancelled(fetchParams) && fetchParams.request.redirectCount === 0) {
+    return Promise.resolve(makeAppropriateNetworkError(fetchParams));
+  }
 
-          // 1. Let blobURLEntry be request’s current URL’s blob URL entry.
-          blobURLEntry = requestCurrentURL(request); // https://github.com/web-platform-tests/wpt/blob/7b0ebaccc62b566a1965396e5be7bb2bc06f841f/FileAPI/url/resources/fetch-tests.js#L52-L56
-          // Buffer.resolveObjectURL does not ignore URL queries.
-          if (!(blobURLEntry.search.length !== 0)) {
-            _context4.next = 12;
-            break;
-          }
-          return _context4.abrupt("return", makeNetworkError('NetworkError when attempting to fetch resource.'));
-        case 12:
-          blobURLEntryObject = resolveObjectURL(blobURLEntry.toString()); // 2. If request’s method is not `GET`, blobURLEntry is null, or blobURLEntry’s
-          //    object is not a Blob object, then return a network error.
-          if (!(request.method !== 'GET' || !isBlobLike(blobURLEntryObject))) {
-            _context4.next = 15;
-            break;
-          }
-          return _context4.abrupt("return", makeNetworkError('invalid method'));
-        case 15:
-          // 3. Let bodyWithType be the result of safely extracting blobURLEntry’s object.
-          bodyWithType = safelyExtractBody(blobURLEntryObject); // 4. Let body be bodyWithType’s body.
-          body = bodyWithType[0]; // 5. Let length be body’s length, serialized and isomorphic encoded.
-          length = isomorphicEncode("".concat(body.length)); // 6. Let type be bodyWithType’s type if it is non-null; otherwise the empty byte sequence.
-          type = (_bodyWithType$ = bodyWithType[1]) !== null && _bodyWithType$ !== void 0 ? _bodyWithType$ : ''; // 7. Return a new response whose status message is `OK`, header list is
-          //    « (`Content-Length`, length), (`Content-Type`, type) », and body is body.
-          _response = makeResponse({
-            statusText: 'OK',
-            headersList: [['content-length', {
-              name: 'Content-Length',
-              value: length
-            }], ['content-type', {
-              name: 'Content-Type',
-              value: type
-            }]]
-          });
-          _response.body = body;
-          return _context4.abrupt("return", _response);
-        case 22:
-          // 1. Let dataURLStruct be the result of running the
-          //    data: URL processor on request’s current URL.
-          currentURL = requestCurrentURL(request);
-          dataURLStruct = dataURLProcessor(currentURL); // 2. If dataURLStruct is failure, then return a
-          //    network error.
-          if (!(dataURLStruct === 'failure')) {
-            _context4.next = 26;
-            break;
-          }
-          return _context4.abrupt("return", makeNetworkError('failed to fetch the data URL'));
-        case 26:
-          // 3. Let mimeType be dataURLStruct’s MIME type, serialized.
-          mimeType = serializeAMimeType(dataURLStruct.mimeType); // 4. Return a response whose status message is `OK`,
-          //    header list is « (`Content-Type`, mimeType) »,
-          //    and body is dataURLStruct’s body as a body.
-          return _context4.abrupt("return", makeResponse({
-            statusText: 'OK',
-            headersList: [['content-type', {
-              name: 'Content-Type',
-              value: mimeType
-            }]],
-            body: safelyExtractBody(dataURLStruct.body)[0]
-          }));
-        case 28:
-          return _context4.abrupt("return", makeNetworkError('not implemented... yet...'));
-        case 29:
-          _context4.next = 31;
-          return httpFetch(fetchParams)["catch"](function (err) {
-            return makeNetworkError(err);
-          });
-        case 31:
-          return _context4.abrupt("return", _context4.sent);
-        case 32:
-          return _context4.abrupt("return", makeNetworkError('unknown scheme'));
-        case 33:
-        case "end":
-          return _context4.stop();
+  // 2. Let request be fetchParams’s request.
+  var request = fetchParams.request;
+  var _requestCurrentURL = requestCurrentURL(request),
+    scheme = _requestCurrentURL.protocol;
+
+  // 3. Switch on request’s current URL’s scheme and run the associated steps:
+  switch (scheme) {
+    case 'about:':
+      {
+        // If request’s current URL’s path is the string "blank", then return a new response
+        // whose status message is `OK`, header list is « (`Content-Type`, `text/html;charset=utf-8`) »,
+        // and body is the empty byte sequence as a body.
+
+        // Otherwise, return a network error.
+        return Promise.resolve(makeNetworkError('about scheme is not supported'));
       }
-    }, _callee4);
-  }));
-  return _schemeFetch.apply(this, arguments);
+    case 'blob:':
+      {
+        var _bodyWithType$;
+        if (!resolveObjectURL) {
+          resolveObjectURL = (__webpack_require__(4300).resolveObjectURL);
+        }
+
+        // 1. Let blobURLEntry be request’s current URL’s blob URL entry.
+        var blobURLEntry = requestCurrentURL(request);
+
+        // https://github.com/web-platform-tests/wpt/blob/7b0ebaccc62b566a1965396e5be7bb2bc06f841f/FileAPI/url/resources/fetch-tests.js#L52-L56
+        // Buffer.resolveObjectURL does not ignore URL queries.
+        if (blobURLEntry.search.length !== 0) {
+          return Promise.resolve(makeNetworkError('NetworkError when attempting to fetch resource.'));
+        }
+        var blobURLEntryObject = resolveObjectURL(blobURLEntry.toString());
+
+        // 2. If request’s method is not `GET`, blobURLEntry is null, or blobURLEntry’s
+        //    object is not a Blob object, then return a network error.
+        if (request.method !== 'GET' || !isBlobLike(blobURLEntryObject)) {
+          return Promise.resolve(makeNetworkError('invalid method'));
+        }
+
+        // 3. Let bodyWithType be the result of safely extracting blobURLEntry’s object.
+        var bodyWithType = safelyExtractBody(blobURLEntryObject);
+
+        // 4. Let body be bodyWithType’s body.
+        var body = bodyWithType[0];
+
+        // 5. Let length be body’s length, serialized and isomorphic encoded.
+        var length = isomorphicEncode("".concat(body.length));
+
+        // 6. Let type be bodyWithType’s type if it is non-null; otherwise the empty byte sequence.
+        var type = (_bodyWithType$ = bodyWithType[1]) !== null && _bodyWithType$ !== void 0 ? _bodyWithType$ : '';
+
+        // 7. Return a new response whose status message is `OK`, header list is
+        //    « (`Content-Length`, length), (`Content-Type`, type) », and body is body.
+        var response = makeResponse({
+          statusText: 'OK',
+          headersList: [['content-length', {
+            name: 'Content-Length',
+            value: length
+          }], ['content-type', {
+            name: 'Content-Type',
+            value: type
+          }]]
+        });
+        response.body = body;
+        return Promise.resolve(response);
+      }
+    case 'data:':
+      {
+        // 1. Let dataURLStruct be the result of running the
+        //    data: URL processor on request’s current URL.
+        var currentURL = requestCurrentURL(request);
+        var dataURLStruct = dataURLProcessor(currentURL);
+
+        // 2. If dataURLStruct is failure, then return a
+        //    network error.
+        if (dataURLStruct === 'failure') {
+          return Promise.resolve(makeNetworkError('failed to fetch the data URL'));
+        }
+
+        // 3. Let mimeType be dataURLStruct’s MIME type, serialized.
+        var mimeType = serializeAMimeType(dataURLStruct.mimeType);
+
+        // 4. Return a response whose status message is `OK`,
+        //    header list is « (`Content-Type`, mimeType) »,
+        //    and body is dataURLStruct’s body as a body.
+        return Promise.resolve(makeResponse({
+          statusText: 'OK',
+          headersList: [['content-type', {
+            name: 'Content-Type',
+            value: mimeType
+          }]],
+          body: safelyExtractBody(dataURLStruct.body)[0]
+        }));
+      }
+    case 'file:':
+      {
+        // For now, unfortunate as it is, file URLs are left as an exercise for the reader.
+        // When in doubt, return a network error.
+        return Promise.resolve(makeNetworkError('not implemented... yet...'));
+      }
+    case 'http:':
+    case 'https:':
+      {
+        // Return the result of running HTTP fetch given fetchParams.
+
+        return httpFetch(fetchParams)["catch"](function (err) {
+          return makeNetworkError(err);
+        });
+      }
+    default:
+      {
+        return Promise.resolve(makeNetworkError('unknown scheme'));
+      }
+  }
 }
+
+// https://fetch.spec.whatwg.org/#finalize-response
 function finalizeResponse(fetchParams, response) {
   // 1. Set fetchParams’s request’s done flag.
   fetchParams.request.done = true;
@@ -17233,122 +15854,117 @@ function finalizeResponse(fetchParams, response) {
 }
 
 // https://fetch.spec.whatwg.org/#fetch-finale
-function fetchFinale(_x5, _x6) {
-  return _fetchFinale.apply(this, arguments);
-} // https://fetch.spec.whatwg.org/#http-fetch
-function _fetchFinale() {
-  _fetchFinale = _asyncToGenerator( /*#__PURE__*/_regeneratorRuntime().mark(function _callee5(fetchParams, response) {
-    var processResponseEndOfBody, identityTransformAlgorithm, transformStream, processBody, _processBodyError;
-    return _regeneratorRuntime().wrap(function _callee5$(_context5) {
-      while (1) switch (_context5.prev = _context5.next) {
-        case 0:
-          // 1. If response is a network error, then:
-          if (response.type === 'error') {
-            // 1. Set response’s URL list to « fetchParams’s request’s URL list[0] ».
-            response.urlList = [fetchParams.request.urlList[0]];
+function fetchFinale(fetchParams, response) {
+  // 1. If response is a network error, then:
+  if (response.type === 'error') {
+    // 1. Set response’s URL list to « fetchParams’s request’s URL list[0] ».
+    response.urlList = [fetchParams.request.urlList[0]];
 
-            // 2. Set response’s timing info to the result of creating an opaque timing
-            // info for fetchParams’s timing info.
-            response.timingInfo = createOpaqueTimingInfo({
-              startTime: fetchParams.timingInfo.startTime
-            });
-          }
+    // 2. Set response’s timing info to the result of creating an opaque timing
+    // info for fetchParams’s timing info.
+    response.timingInfo = createOpaqueTimingInfo({
+      startTime: fetchParams.timingInfo.startTime
+    });
+  }
 
-          // 2. Let processResponseEndOfBody be the following steps:
-          processResponseEndOfBody = function processResponseEndOfBody() {
-            // 1. Set fetchParams’s request’s done flag.
-            fetchParams.request.done = true;
+  // 2. Let processResponseEndOfBody be the following steps:
+  var processResponseEndOfBody = function processResponseEndOfBody() {
+    // 1. Set fetchParams’s request’s done flag.
+    fetchParams.request.done = true;
 
-            // If fetchParams’s process response end-of-body is not null,
-            // then queue a fetch task to run fetchParams’s process response
-            // end-of-body given response with fetchParams’s task destination.
-            if (fetchParams.processResponseEndOfBody != null) {
-              queueMicrotask(function () {
-                return fetchParams.processResponseEndOfBody(response);
-              });
-            }
-          }; // 3. If fetchParams’s process response is non-null, then queue a fetch task
-          // to run fetchParams’s process response given response, with fetchParams’s
-          // task destination.
-          if (fetchParams.processResponse != null) {
-            queueMicrotask(function () {
-              return fetchParams.processResponse(response);
-            });
-          }
+    // If fetchParams’s process response end-of-body is not null,
+    // then queue a fetch task to run fetchParams’s process response
+    // end-of-body given response with fetchParams’s task destination.
+    if (fetchParams.processResponseEndOfBody != null) {
+      queueMicrotask(function () {
+        return fetchParams.processResponseEndOfBody(response);
+      });
+    }
+  };
 
-          // 4. If response’s body is null, then run processResponseEndOfBody.
-          if (response.body == null) {
-            processResponseEndOfBody();
-          } else {
-            // 5. Otherwise:
-            // 1. Let transformStream be a new a TransformStream.
-            // 2. Let identityTransformAlgorithm be an algorithm which, given chunk,
-            // enqueues chunk in transformStream.
-            identityTransformAlgorithm = function identityTransformAlgorithm(chunk, controller) {
-              controller.enqueue(chunk);
-            }; // 3. Set up transformStream with transformAlgorithm set to identityTransformAlgorithm
-            // and flushAlgorithm set to processResponseEndOfBody.
-            transformStream = new TransformStream({
-              start: function start() {},
-              transform: identityTransformAlgorithm,
-              flush: processResponseEndOfBody
-            }, {
-              size: function size() {
-                return 1;
-              }
-            }, {
-              size: function size() {
-                return 1;
-              }
-            }); // 4. Set response’s body to the result of piping response’s body through transformStream.
-            response.body = {
-              stream: response.body.stream.pipeThrough(transformStream)
-            };
-          }
+  // 3. If fetchParams’s process response is non-null, then queue a fetch task
+  // to run fetchParams’s process response given response, with fetchParams’s
+  // task destination.
+  if (fetchParams.processResponse != null) {
+    queueMicrotask(function () {
+      return fetchParams.processResponse(response);
+    });
+  }
 
-          // 6. If fetchParams’s process response consume body is non-null, then:
-          if (!(fetchParams.processResponseConsumeBody != null)) {
-            _context5.next = 13;
-            break;
-          }
-          // 1. Let processBody given nullOrBytes be this step: run fetchParams’s
-          // process response consume body given response and nullOrBytes.
-          processBody = function processBody(nullOrBytes) {
-            return fetchParams.processResponseConsumeBody(response, nullOrBytes);
-          }; // 2. Let processBodyError be this step: run fetchParams’s process
-          // response consume body given response and failure.
-          _processBodyError = function _processBodyError(failure) {
-            return fetchParams.processResponseConsumeBody(response, failure);
-          }; // 3. If response’s body is null, then queue a fetch task to run processBody
-          // given null, with fetchParams’s task destination.
-          if (!(response.body == null)) {
-            _context5.next = 11;
-            break;
-          }
-          queueMicrotask(function () {
-            return processBody(null);
-          });
-          _context5.next = 13;
-          break;
-        case 11:
-          _context5.next = 13;
-          return fullyReadBody(response.body, processBody, _processBodyError);
-        case 13:
-        case "end":
-          return _context5.stop();
+  // 4. If response’s body is null, then run processResponseEndOfBody.
+  if (response.body == null) {
+    processResponseEndOfBody();
+  } else {
+    // 5. Otherwise:
+
+    // 1. Let transformStream be a new a TransformStream.
+
+    // 2. Let identityTransformAlgorithm be an algorithm which, given chunk,
+    // enqueues chunk in transformStream.
+    var identityTransformAlgorithm = function identityTransformAlgorithm(chunk, controller) {
+      controller.enqueue(chunk);
+    };
+
+    // 3. Set up transformStream with transformAlgorithm set to identityTransformAlgorithm
+    // and flushAlgorithm set to processResponseEndOfBody.
+    var transformStream = new TransformStream({
+      start: function start() {},
+      transform: identityTransformAlgorithm,
+      flush: processResponseEndOfBody
+    }, {
+      size: function size() {
+        return 1;
       }
-    }, _callee5);
-  }));
-  return _fetchFinale.apply(this, arguments);
+    }, {
+      size: function size() {
+        return 1;
+      }
+    });
+
+    // 4. Set response’s body to the result of piping response’s body through transformStream.
+    response.body = {
+      stream: response.body.stream.pipeThrough(transformStream)
+    };
+  }
+
+  // 6. If fetchParams’s process response consume body is non-null, then:
+  if (fetchParams.processResponseConsumeBody != null) {
+    // 1. Let processBody given nullOrBytes be this step: run fetchParams’s
+    // process response consume body given response and nullOrBytes.
+    var processBody = function processBody(nullOrBytes) {
+      return fetchParams.processResponseConsumeBody(response, nullOrBytes);
+    };
+
+    // 2. Let processBodyError be this step: run fetchParams’s process
+    // response consume body given response and failure.
+    var processBodyError = function processBodyError(failure) {
+      return fetchParams.processResponseConsumeBody(response, failure);
+    };
+
+    // 3. If response’s body is null, then queue a fetch task to run processBody
+    // given null, with fetchParams’s task destination.
+    if (response.body == null) {
+      queueMicrotask(function () {
+        return processBody(null);
+      });
+    } else {
+      // 4. Otherwise, fully read response’s body given processBody, processBodyError,
+      // and fetchParams’s task destination.
+      return fullyReadBody(response.body, processBody, processBodyError);
+    }
+    return Promise.resolve();
+  }
 }
-function httpFetch(_x7) {
+
+// https://fetch.spec.whatwg.org/#http-fetch
+function httpFetch(_x3) {
   return _httpFetch.apply(this, arguments);
 } // https://fetch.spec.whatwg.org/#http-redirect-fetch
 function _httpFetch() {
-  _httpFetch = _asyncToGenerator( /*#__PURE__*/_regeneratorRuntime().mark(function _callee6(fetchParams) {
+  _httpFetch = _asyncToGenerator( /*#__PURE__*/_regeneratorRuntime().mark(function _callee3(fetchParams) {
     var request, response, actualResponse, timingInfo;
-    return _regeneratorRuntime().wrap(function _callee6$(_context6) {
-      while (1) switch (_context6.prev = _context6.next) {
+    return _regeneratorRuntime().wrap(function _callee3$(_context3) {
+      while (1) switch (_context3.prev = _context3.next) {
         case 0:
           // 1. Let request be fetchParams’s request.
           request = fetchParams.request; // 2. Let response be null.
@@ -17361,7 +15977,7 @@ function _httpFetch() {
 
           // 6. If response is null, then:
           if (!(response === null)) {
-            _context6.next = 13;
+            _context3.next = 13;
             break;
           }
           // 1. If makeCORSPreflight is true and one of these conditions is true:
@@ -17375,15 +15991,15 @@ function _httpFetch() {
 
           // 3. Set response and actualResponse to the result of running
           // HTTP-network-or-cache fetch given fetchParams.
-          _context6.next = 9;
+          _context3.next = 9;
           return httpNetworkOrCacheFetch(fetchParams);
         case 9:
-          actualResponse = response = _context6.sent;
+          actualResponse = response = _context3.sent;
           if (!(request.responseTainting === 'cors' && corsCheck(request, response) === 'failure')) {
-            _context6.next = 12;
+            _context3.next = 12;
             break;
           }
-          return _context6.abrupt("return", makeNetworkError('cors failure'));
+          return _context3.abrupt("return", makeNetworkError('cors failure'));
         case 12:
           // 5. If the TAO check for request and response returns failure, then set
           // request’s timing allow failed flag.
@@ -17392,13 +16008,13 @@ function _httpFetch() {
           }
         case 13:
           if (!((request.responseTainting === 'opaque' || response.type === 'opaque') && crossOriginResourcePolicyCheck(request.origin, request.client, request.destination, actualResponse) === 'blocked')) {
-            _context6.next = 15;
+            _context3.next = 15;
             break;
           }
-          return _context6.abrupt("return", makeNetworkError('blocked'));
+          return _context3.abrupt("return", makeNetworkError('blocked'));
         case 15:
-          if (!redirectStatus.includes(actualResponse.status)) {
-            _context6.next = 32;
+          if (!redirectStatusSet.has(actualResponse.status)) {
+            _context3.next = 32;
             break;
           }
           // 1. If actualResponse’s status is not 303, request’s body is not null,
@@ -17411,16 +16027,16 @@ function _httpFetch() {
 
           // 2. Switch on request’s redirect mode:
           if (!(request.redirect === 'error')) {
-            _context6.next = 21;
+            _context3.next = 21;
             break;
           }
           // Set response to a network error.
           response = makeNetworkError('unexpected redirect');
-          _context6.next = 32;
+          _context3.next = 32;
           break;
         case 21:
           if (!(request.redirect === 'manual')) {
-            _context6.next = 25;
+            _context3.next = 25;
             break;
           }
           // Set response to an opaque-redirect filtered response whose internal
@@ -17429,18 +16045,18 @@ function _httpFetch() {
           // but that doesn't make sense server side.
           // See https://github.com/nodejs/undici/issues/1193.
           response = actualResponse;
-          _context6.next = 32;
+          _context3.next = 32;
           break;
         case 25:
           if (!(request.redirect === 'follow')) {
-            _context6.next = 31;
+            _context3.next = 31;
             break;
           }
-          _context6.next = 28;
+          _context3.next = 28;
           return httpRedirectFetch(fetchParams, response);
         case 28:
-          response = _context6.sent;
-          _context6.next = 32;
+          response = _context3.sent;
+          _context3.next = 32;
           break;
         case 31:
           assert(false);
@@ -17449,159 +16065,146 @@ function _httpFetch() {
           response.timingInfo = timingInfo;
 
           // 10. Return response.
-          return _context6.abrupt("return", response);
+          return _context3.abrupt("return", response);
         case 34:
         case "end":
-          return _context6.stop();
+          return _context3.stop();
       }
-    }, _callee6);
+    }, _callee3);
   }));
   return _httpFetch.apply(this, arguments);
 }
-function httpRedirectFetch(_x8, _x9) {
-  return _httpRedirectFetch.apply(this, arguments);
-} // https://fetch.spec.whatwg.org/#http-network-or-cache-fetch
-function _httpRedirectFetch() {
-  _httpRedirectFetch = _asyncToGenerator( /*#__PURE__*/_regeneratorRuntime().mark(function _callee7(fetchParams, response) {
-    var request, actualResponse, locationURL, _iterator2, _step2, headerName, timingInfo;
-    return _regeneratorRuntime().wrap(function _callee7$(_context7) {
-      while (1) switch (_context7.prev = _context7.next) {
-        case 0:
-          // 1. Let request be fetchParams’s request.
-          request = fetchParams.request; // 2. Let actualResponse be response, if response is not a filtered response,
-          // and response’s internal response otherwise.
-          actualResponse = response.internalResponse ? response.internalResponse : response; // 3. Let locationURL be actualResponse’s location URL given request’s current
-          // URL’s fragment.
-          _context7.prev = 2;
-          locationURL = responseLocationURL(actualResponse, requestCurrentURL(request).hash);
+function httpRedirectFetch(fetchParams, response) {
+  // 1. Let request be fetchParams’s request.
+  var request = fetchParams.request;
 
-          // 4. If locationURL is null, then return response.
-          if (!(locationURL == null)) {
-            _context7.next = 6;
-            break;
-          }
-          return _context7.abrupt("return", response);
-        case 6:
-          _context7.next = 11;
-          break;
-        case 8:
-          _context7.prev = 8;
-          _context7.t0 = _context7["catch"](2);
-          return _context7.abrupt("return", makeNetworkError(_context7.t0));
-        case 11:
-          if (urlIsHttpHttpsScheme(locationURL)) {
-            _context7.next = 13;
-            break;
-          }
-          return _context7.abrupt("return", makeNetworkError('URL scheme must be a HTTP(S) scheme'));
-        case 13:
-          if (!(request.redirectCount === 20)) {
-            _context7.next = 15;
-            break;
-          }
-          return _context7.abrupt("return", makeNetworkError('redirect count exceeded'));
-        case 15:
-          // 8. Increase request’s redirect count by 1.
-          request.redirectCount += 1;
+  // 2. Let actualResponse be response, if response is not a filtered response,
+  // and response’s internal response otherwise.
+  var actualResponse = response.internalResponse ? response.internalResponse : response;
 
-          // 9. If request’s mode is "cors", locationURL includes credentials, and
-          // request’s origin is not same origin with locationURL’s origin, then return
-          //  a network error.
-          if (!(request.mode === 'cors' && (locationURL.username || locationURL.password) && !sameOrigin(request, locationURL))) {
-            _context7.next = 18;
-            break;
-          }
-          return _context7.abrupt("return", makeNetworkError('cross origin not allowed for request mode "cors"'));
-        case 18:
-          if (!(request.responseTainting === 'cors' && (locationURL.username || locationURL.password))) {
-            _context7.next = 20;
-            break;
-          }
-          return _context7.abrupt("return", makeNetworkError('URL cannot contain credentials for request mode "cors"'));
-        case 20:
-          if (!(actualResponse.status !== 303 && request.body != null && request.body.source == null)) {
-            _context7.next = 22;
-            break;
-          }
-          return _context7.abrupt("return", makeNetworkError());
-        case 22:
-          // 12. If one of the following is true
-          // - actualResponse’s status is 301 or 302 and request’s method is `POST`
-          // - actualResponse’s status is 303 and request’s method is not `GET` or `HEAD`
-          if ([301, 302].includes(actualResponse.status) && request.method === 'POST' || actualResponse.status === 303 && !['GET', 'HEAD'].includes(request.method)) {
-            // then:
-            // 1. Set request’s method to `GET` and request’s body to null.
-            request.method = 'GET';
-            request.body = null;
+  // 3. Let locationURL be actualResponse’s location URL given request’s current
+  // URL’s fragment.
+  var locationURL;
+  try {
+    locationURL = responseLocationURL(actualResponse, requestCurrentURL(request).hash);
 
-            // 2. For each headerName of request-body-header name, delete headerName from
-            // request’s header list.
-            _iterator2 = _createForOfIteratorHelper(requestBodyHeader);
-            try {
-              for (_iterator2.s(); !(_step2 = _iterator2.n()).done;) {
-                headerName = _step2.value;
-                request.headersList["delete"](headerName);
-              }
-            } catch (err) {
-              _iterator2.e(err);
-            } finally {
-              _iterator2.f();
-            }
-          }
+    // 4. If locationURL is null, then return response.
+    if (locationURL == null) {
+      return response;
+    }
+  } catch (err) {
+    // 5. If locationURL is failure, then return a network error.
+    return Promise.resolve(makeNetworkError(err));
+  }
 
-          // 13. If request’s current URL’s origin is not same origin with locationURL’s
-          //     origin, then for each headerName of CORS non-wildcard request-header name,
-          //     delete headerName from request’s header list.
-          if (!sameOrigin(requestCurrentURL(request), locationURL)) {
-            // https://fetch.spec.whatwg.org/#cors-non-wildcard-request-header-name
-            request.headersList["delete"]('authorization');
+  // 6. If locationURL’s scheme is not an HTTP(S) scheme, then return a network
+  // error.
+  if (!urlIsHttpHttpsScheme(locationURL)) {
+    return Promise.resolve(makeNetworkError('URL scheme must be a HTTP(S) scheme'));
+  }
 
-            // "Cookie" and "Host" are forbidden request-headers, which undici doesn't implement.
-            request.headersList["delete"]('cookie');
-            request.headersList["delete"]('host');
-          }
+  // 7. If request’s redirect count is 20, then return a network error.
+  if (request.redirectCount === 20) {
+    return Promise.resolve(makeNetworkError('redirect count exceeded'));
+  }
 
-          // 14. If request’s body is non-null, then set request’s body to the first return
-          // value of safely extracting request’s body’s source.
-          if (request.body != null) {
-            assert(request.body.source != null);
-            request.body = safelyExtractBody(request.body.source)[0];
-          }
+  // 8. Increase request’s redirect count by 1.
+  request.redirectCount += 1;
 
-          // 15. Let timingInfo be fetchParams’s timing info.
-          timingInfo = fetchParams.timingInfo; // 16. Set timingInfo’s redirect end time and post-redirect start time to the
-          // coarsened shared current time given fetchParams’s cross-origin isolated
-          // capability.
-          timingInfo.redirectEndTime = timingInfo.postRedirectStartTime = coarsenedSharedCurrentTime(fetchParams.crossOriginIsolatedCapability);
+  // 9. If request’s mode is "cors", locationURL includes credentials, and
+  // request’s origin is not same origin with locationURL’s origin, then return
+  //  a network error.
+  if (request.mode === 'cors' && (locationURL.username || locationURL.password) && !sameOrigin(request, locationURL)) {
+    return Promise.resolve(makeNetworkError('cross origin not allowed for request mode "cors"'));
+  }
 
-          // 17. If timingInfo’s redirect start time is 0, then set timingInfo’s
-          //  redirect start time to timingInfo’s start time.
-          if (timingInfo.redirectStartTime === 0) {
-            timingInfo.redirectStartTime = timingInfo.startTime;
-          }
+  // 10. If request’s response tainting is "cors" and locationURL includes
+  // credentials, then return a network error.
+  if (request.responseTainting === 'cors' && (locationURL.username || locationURL.password)) {
+    return Promise.resolve(makeNetworkError('URL cannot contain credentials for request mode "cors"'));
+  }
 
-          // 18. Append locationURL to request’s URL list.
-          request.urlList.push(locationURL);
+  // 11. If actualResponse’s status is not 303, request’s body is non-null,
+  // and request’s body’s source is null, then return a network error.
+  if (actualResponse.status !== 303 && request.body != null && request.body.source == null) {
+    return Promise.resolve(makeNetworkError());
+  }
 
-          // 19. Invoke set request’s referrer policy on redirect on request and
-          // actualResponse.
-          setRequestReferrerPolicyOnRedirect(request, actualResponse);
+  // 12. If one of the following is true
+  // - actualResponse’s status is 301 or 302 and request’s method is `POST`
+  // - actualResponse’s status is 303 and request’s method is not `GET` or `HEAD`
+  if ([301, 302].includes(actualResponse.status) && request.method === 'POST' || actualResponse.status === 303 && !GET_OR_HEAD.includes(request.method)) {
+    // then:
+    // 1. Set request’s method to `GET` and request’s body to null.
+    request.method = 'GET';
+    request.body = null;
 
-          // 20. Return the result of running main fetch given fetchParams and true.
-          return _context7.abrupt("return", mainFetch(fetchParams, true));
-        case 31:
-        case "end":
-          return _context7.stop();
+    // 2. For each headerName of request-body-header name, delete headerName from
+    // request’s header list.
+    var _iterator2 = _createForOfIteratorHelper(requestBodyHeader),
+      _step2;
+    try {
+      for (_iterator2.s(); !(_step2 = _iterator2.n()).done;) {
+        var headerName = _step2.value;
+        request.headersList["delete"](headerName);
       }
-    }, _callee7, null, [[2, 8]]);
-  }));
-  return _httpRedirectFetch.apply(this, arguments);
+    } catch (err) {
+      _iterator2.e(err);
+    } finally {
+      _iterator2.f();
+    }
+  }
+
+  // 13. If request’s current URL’s origin is not same origin with locationURL’s
+  //     origin, then for each headerName of CORS non-wildcard request-header name,
+  //     delete headerName from request’s header list.
+  if (!sameOrigin(requestCurrentURL(request), locationURL)) {
+    // https://fetch.spec.whatwg.org/#cors-non-wildcard-request-header-name
+    request.headersList["delete"]('authorization');
+
+    // "Cookie" and "Host" are forbidden request-headers, which undici doesn't implement.
+    request.headersList["delete"]('cookie');
+    request.headersList["delete"]('host');
+  }
+
+  // 14. If request’s body is non-null, then set request’s body to the first return
+  // value of safely extracting request’s body’s source.
+  if (request.body != null) {
+    assert(request.body.source != null);
+    request.body = safelyExtractBody(request.body.source)[0];
+  }
+
+  // 15. Let timingInfo be fetchParams’s timing info.
+  var timingInfo = fetchParams.timingInfo;
+
+  // 16. Set timingInfo’s redirect end time and post-redirect start time to the
+  // coarsened shared current time given fetchParams’s cross-origin isolated
+  // capability.
+  timingInfo.redirectEndTime = timingInfo.postRedirectStartTime = coarsenedSharedCurrentTime(fetchParams.crossOriginIsolatedCapability);
+
+  // 17. If timingInfo’s redirect start time is 0, then set timingInfo’s
+  //  redirect start time to timingInfo’s start time.
+  if (timingInfo.redirectStartTime === 0) {
+    timingInfo.redirectStartTime = timingInfo.startTime;
+  }
+
+  // 18. Append locationURL to request’s URL list.
+  request.urlList.push(locationURL);
+
+  // 19. Invoke set request’s referrer policy on redirect on request and
+  // actualResponse.
+  setRequestReferrerPolicyOnRedirect(request, actualResponse);
+
+  // 20. Return the result of running main fetch given fetchParams and true.
+  return mainFetch(fetchParams, true);
 }
-function httpNetworkOrCacheFetch(_x10) {
+
+// https://fetch.spec.whatwg.org/#http-network-or-cache-fetch
+function httpNetworkOrCacheFetch(_x4) {
   return _httpNetworkOrCacheFetch.apply(this, arguments);
 } // https://fetch.spec.whatwg.org/#http-network-fetch
 function _httpNetworkOrCacheFetch() {
-  _httpNetworkOrCacheFetch = _asyncToGenerator( /*#__PURE__*/_regeneratorRuntime().mark(function _callee8(fetchParams) {
+  _httpNetworkOrCacheFetch = _asyncToGenerator( /*#__PURE__*/_regeneratorRuntime().mark(function _callee4(fetchParams) {
     var isAuthenticationFetch,
       isNewConnectionFetch,
       request,
@@ -17614,12 +16217,12 @@ function _httpNetworkOrCacheFetch() {
       contentLength,
       contentLengthHeaderValue,
       forwardResponse,
-      _args8 = arguments;
-    return _regeneratorRuntime().wrap(function _callee8$(_context8) {
-      while (1) switch (_context8.prev = _context8.next) {
+      _args4 = arguments;
+    return _regeneratorRuntime().wrap(function _callee4$(_context4) {
+      while (1) switch (_context4.prev = _context4.next) {
         case 0:
-          isAuthenticationFetch = _args8.length > 1 && _args8[1] !== undefined ? _args8[1] : false;
-          isNewConnectionFetch = _args8.length > 2 && _args8[2] !== undefined ? _args8[2] : false;
+          isAuthenticationFetch = _args4.length > 1 && _args4[1] !== undefined ? _args4[1] : false;
+          isNewConnectionFetch = _args4.length > 2 && _args4[2] !== undefined ? _args4[2] : false;
           // 1. Let request be fetchParams’s request.
           request = fetchParams.request; // 2. Let httpFetchParams be null.
           httpFetchParams = null; // 3. Let httpRequest be null.
@@ -17782,24 +16385,24 @@ function _httpNetworkOrCacheFetch() {
 
           // 10. If response is null, then:
           if (!(response == null)) {
-            _context8.next = 38;
+            _context4.next = 38;
             break;
           }
           if (!(httpRequest.mode === 'only-if-cached')) {
-            _context8.next = 32;
+            _context4.next = 32;
             break;
           }
-          return _context8.abrupt("return", makeNetworkError('only if cached'));
+          return _context4.abrupt("return", makeNetworkError('only if cached'));
         case 32:
-          _context8.next = 34;
+          _context4.next = 34;
           return httpNetworkFetch(httpFetchParams, includeCredentials, isNewConnectionFetch);
         case 34:
-          forwardResponse = _context8.sent;
+          forwardResponse = _context4.sent;
           // 3. If httpRequest’s method is unsafe and forwardResponse’s status is
           // in the range 200 to 399, inclusive, invalidate appropriate stored
           // responses in httpCache, as per the "Invalidation" chapter of HTTP
           // Caching, and set storedResponse to null. [HTTP-CACHING]
-          if (!safeMethods.includes(httpRequest.method) && forwardResponse.status >= 200 && forwardResponse.status <= 399) {
+          if (!safeMethodsSet.has(httpRequest.method) && forwardResponse.status >= 200 && forwardResponse.status <= 399) {
             // TODO: cache
           }
 
@@ -17838,22 +16441,22 @@ function _httpNetworkOrCacheFetch() {
 
           // 15. If response’s status is 407, then:
           if (!(response.status === 407)) {
-            _context8.next = 47;
+            _context4.next = 47;
             break;
           }
           if (!(request.window === 'no-window')) {
-            _context8.next = 44;
+            _context4.next = 44;
             break;
           }
-          return _context8.abrupt("return", makeNetworkError());
+          return _context4.abrupt("return", makeNetworkError());
         case 44:
           if (!isCancelled(fetchParams)) {
-            _context8.next = 46;
+            _context4.next = 46;
             break;
           }
-          return _context8.abrupt("return", makeAppropriateNetworkError(fetchParams));
+          return _context4.abrupt("return", makeAppropriateNetworkError(fetchParams));
         case 46:
-          return _context8.abrupt("return", makeNetworkError('proxy authentication required'));
+          return _context4.abrupt("return", makeNetworkError('proxy authentication required'));
         case 47:
           if (!(
           // response’s status is 421
@@ -17862,14 +16465,14 @@ function _httpNetworkOrCacheFetch() {
           !isNewConnectionFetch && (
           // request’s body is null, or request’s body is non-null and request’s body’s source is non-null
           request.body == null || request.body.source != null))) {
-            _context8.next = 54;
+            _context4.next = 54;
             break;
           }
           if (!isCancelled(fetchParams)) {
-            _context8.next = 50;
+            _context4.next = 50;
             break;
           }
-          return _context8.abrupt("return", makeAppropriateNetworkError(fetchParams));
+          return _context4.abrupt("return", makeAppropriateNetworkError(fetchParams));
         case 50:
           // 2. Set response to the result of running HTTP-network-or-cache
           // fetch given fetchParams, isAuthenticationFetch, and true.
@@ -17878,10 +16481,10 @@ function _httpNetworkOrCacheFetch() {
           // the active response before we can start a new one.
           // https://github.com/whatwg/fetch/issues/1293
           fetchParams.controller.connection.destroy();
-          _context8.next = 53;
+          _context4.next = 53;
           return httpNetworkOrCacheFetch(fetchParams, isAuthenticationFetch, true);
         case 53:
-          response = _context8.sent;
+          response = _context4.sent;
         case 54:
           // 17. If isAuthenticationFetch is true, then create an authentication entry
           if (isAuthenticationFetch) {
@@ -17889,20 +16492,20 @@ function _httpNetworkOrCacheFetch() {
           }
 
           // 18. Return response.
-          return _context8.abrupt("return", response);
+          return _context4.abrupt("return", response);
         case 56:
         case "end":
-          return _context8.stop();
+          return _context4.stop();
       }
-    }, _callee8);
+    }, _callee4);
   }));
   return _httpNetworkOrCacheFetch.apply(this, arguments);
 }
-function httpNetworkFetch(_x11) {
+function httpNetworkFetch(_x5) {
   return _httpNetworkFetch.apply(this, arguments);
 }
 function _httpNetworkFetch() {
-  _httpNetworkFetch = _asyncToGenerator( /*#__PURE__*/_regeneratorRuntime().mark(function _callee16(fetchParams) {
+  _httpNetworkFetch = _asyncToGenerator( /*#__PURE__*/_regeneratorRuntime().mark(function _callee12(fetchParams) {
     var includeCredentials,
       forceNewConnection,
       request,
@@ -17913,7 +16516,7 @@ function _httpNetworkFetch() {
       requestBody,
       processBodyChunk,
       processEndOfBody,
-      _processBodyError2,
+      _processBodyError,
       _yield$dispatch,
       body,
       status,
@@ -17927,26 +16530,26 @@ function _httpNetworkFetch() {
       onAborted,
       dispatch,
       _dispatch,
-      _args16 = arguments;
-    return _regeneratorRuntime().wrap(function _callee16$(_context16) {
-      while (1) switch (_context16.prev = _context16.next) {
+      _args12 = arguments;
+    return _regeneratorRuntime().wrap(function _callee12$(_context12) {
+      while (1) switch (_context12.prev = _context12.next) {
         case 0:
           _dispatch = function _dispatch3() {
-            _dispatch = _asyncToGenerator( /*#__PURE__*/_regeneratorRuntime().mark(function _callee15(_ref5) {
+            _dispatch = _asyncToGenerator( /*#__PURE__*/_regeneratorRuntime().mark(function _callee11(_ref5) {
               var body, url, agent;
-              return _regeneratorRuntime().wrap(function _callee15$(_context15) {
-                while (1) switch (_context15.prev = _context15.next) {
+              return _regeneratorRuntime().wrap(function _callee11$(_context11) {
+                while (1) switch (_context11.prev = _context11.next) {
                   case 0:
                     body = _ref5.body;
                     url = requestCurrentURL(request);
                     /** @type {import('../..').Agent} */
                     agent = fetchParams.controller.dispatcher;
-                    return _context15.abrupt("return", new Promise(function (resolve, reject) {
+                    return _context11.abrupt("return", new Promise(function (resolve, reject) {
                       return agent.dispatch({
                         path: url.pathname + url.search,
                         origin: url.origin,
                         method: request.method,
-                        body: fetchParams.controller.dispatcher.isMockActive ? request.body && request.body.source : body,
+                        body: fetchParams.controller.dispatcher.isMockActive ? request.body && (request.body.source || request.body.stream) : body,
                         headers: request.headersList.entries,
                         maxRedirections: 0,
                         upgrade: request.mode === 'websocket' ? 'websocket' : undefined
@@ -17986,7 +16589,7 @@ function _httpNetworkFetch() {
                               } else if (key.toLowerCase() === 'location') {
                                 location = val;
                               }
-                              headers.append(key, val);
+                              headers[kHeadersList].append(key, val);
                             }
                           } else {
                             var keys = Object.keys(headersList);
@@ -18002,14 +16605,14 @@ function _httpNetworkFetch() {
                               } else if (_key.toLowerCase() === 'location') {
                                 location = _val;
                               }
-                              headers.append(_key, _val);
+                              headers[kHeadersList].append(_key, _val);
                             }
                           }
                           this.body = new Readable({
                             read: resume
                           });
                           var decoders = [];
-                          var willFollow = request.redirect === 'follow' && location && redirectStatus.includes(status);
+                          var willFollow = request.redirect === 'follow' && location && redirectStatusSet.has(status);
 
                           // https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Content-Encoding
                           if (request.method !== 'HEAD' && request.method !== 'CONNECT' && !nullBodyStatus.includes(status) && !willFollow) {
@@ -18097,7 +16700,7 @@ function _httpNetworkFetch() {
                           for (var n = 0; n < headersList.length; n += 2) {
                             var key = headersList[n + 0].toString('latin1');
                             var val = headersList[n + 1].toString('latin1');
-                            headers.append(key, val);
+                            headers[kHeadersList].append(key, val);
                           }
                           resolve({
                             status: status,
@@ -18111,13 +16714,13 @@ function _httpNetworkFetch() {
                     }));
                   case 4:
                   case "end":
-                    return _context15.stop();
+                    return _context11.stop();
                 }
-              }, _callee15);
+              }, _callee11);
             }));
             return _dispatch.apply(this, arguments);
           };
-          dispatch = function _dispatch2(_x12) {
+          dispatch = function _dispatch2(_x6) {
             return _dispatch.apply(this, arguments);
           };
           onAborted = function _onAborted(reason) {
@@ -18146,8 +16749,8 @@ function _httpNetworkFetch() {
             // 5. Otherwise, the user agent should close connection unless it would be bad for performance to do so.
             fetchParams.controller.connection.destroy();
           };
-          includeCredentials = _args16.length > 1 && _args16[1] !== undefined ? _args16[1] : false;
-          forceNewConnection = _args16.length > 2 && _args16[2] !== undefined ? _args16[2] : false;
+          includeCredentials = _args12.length > 1 && _args12[1] !== undefined ? _args12[1] : false;
+          forceNewConnection = _args12.length > 2 && _args12[2] !== undefined ? _args12[2] : false;
           assert(!fetchParams.controller.connection || fetchParams.controller.connection.destroyed);
           fetchParams.controller.connection = {
             abort: null,
@@ -18255,18 +16858,18 @@ function _httpNetworkFetch() {
             // 2. Otherwise, if body is non-null:
             //    1. Let processBodyChunk given bytes be these steps:
             processBodyChunk = /*#__PURE__*/function () {
-              var _ref = _wrapAsyncGenerator( /*#__PURE__*/_regeneratorRuntime().mark(function _callee9(bytes) {
+              var _ref = _wrapAsyncGenerator( /*#__PURE__*/_regeneratorRuntime().mark(function _callee5(bytes) {
                 var _fetchParams$processR;
-                return _regeneratorRuntime().wrap(function _callee9$(_context9) {
-                  while (1) switch (_context9.prev = _context9.next) {
+                return _regeneratorRuntime().wrap(function _callee5$(_context5) {
+                  while (1) switch (_context5.prev = _context5.next) {
                     case 0:
                       if (!isCancelled(fetchParams)) {
-                        _context9.next = 2;
+                        _context5.next = 2;
                         break;
                       }
-                      return _context9.abrupt("return");
+                      return _context5.abrupt("return");
                     case 2:
-                      _context9.next = 4;
+                      _context5.next = 4;
                       return bytes;
                     case 4:
                       // 3. If fetchParams’s process request body is non-null, then run
@@ -18274,9 +16877,9 @@ function _httpNetworkFetch() {
                       (_fetchParams$processR = fetchParams.processRequestBodyChunkLength) === null || _fetchParams$processR === void 0 || _fetchParams$processR.call(fetchParams, bytes.byteLength);
                     case 5:
                     case "end":
-                      return _context9.stop();
+                      return _context5.stop();
                   }
-                }, _callee9);
+                }, _callee5);
               }));
               return function processBodyChunk(_x) {
                 return _ref.apply(this, arguments);
@@ -18294,7 +16897,7 @@ function _httpNetworkFetch() {
                 fetchParams.processRequestEndOfBody();
               }
             }; // 3. Let processBodyError given e be these steps:
-            _processBodyError2 = function _processBodyError2(e) {
+            _processBodyError = function _processBodyError(e) {
               // 1. If fetchParams is canceled, then abort these steps.
               if (isCancelled(fetchParams)) {
                 return;
@@ -18308,80 +16911,80 @@ function _httpNetworkFetch() {
               }
             }; // 4. Incrementally read request’s body given processBodyChunk, processEndOfBody,
             // processBodyError, and fetchParams’s task destination.
-            requestBody = _wrapAsyncGenerator( /*#__PURE__*/_regeneratorRuntime().mark(function _callee10() {
+            requestBody = _wrapAsyncGenerator( /*#__PURE__*/_regeneratorRuntime().mark(function _callee6() {
               var _iteratorAbruptCompletion, _didIteratorError, _iteratorError, _iterator, _step, bytes;
-              return _regeneratorRuntime().wrap(function _callee10$(_context10) {
-                while (1) switch (_context10.prev = _context10.next) {
+              return _regeneratorRuntime().wrap(function _callee6$(_context6) {
+                while (1) switch (_context6.prev = _context6.next) {
                   case 0:
-                    _context10.prev = 0;
+                    _context6.prev = 0;
                     _iteratorAbruptCompletion = false;
                     _didIteratorError = false;
-                    _context10.prev = 3;
+                    _context6.prev = 3;
                     _iterator = _asyncIterator(request.body.stream);
                   case 5:
-                    _context10.next = 7;
+                    _context6.next = 7;
                     return _awaitAsyncGenerator(_iterator.next());
                   case 7:
-                    if (!(_iteratorAbruptCompletion = !(_step = _context10.sent).done)) {
-                      _context10.next = 13;
+                    if (!(_iteratorAbruptCompletion = !(_step = _context6.sent).done)) {
+                      _context6.next = 13;
                       break;
                     }
                     bytes = _step.value;
-                    return _context10.delegateYield(_asyncGeneratorDelegate(_asyncIterator(processBodyChunk(bytes)), _awaitAsyncGenerator), "t0", 10);
+                    return _context6.delegateYield(_asyncGeneratorDelegate(_asyncIterator(processBodyChunk(bytes)), _awaitAsyncGenerator), "t0", 10);
                   case 10:
                     _iteratorAbruptCompletion = false;
-                    _context10.next = 5;
+                    _context6.next = 5;
                     break;
                   case 13:
-                    _context10.next = 19;
+                    _context6.next = 19;
                     break;
                   case 15:
-                    _context10.prev = 15;
-                    _context10.t1 = _context10["catch"](3);
+                    _context6.prev = 15;
+                    _context6.t1 = _context6["catch"](3);
                     _didIteratorError = true;
-                    _iteratorError = _context10.t1;
+                    _iteratorError = _context6.t1;
                   case 19:
-                    _context10.prev = 19;
-                    _context10.prev = 20;
+                    _context6.prev = 19;
+                    _context6.prev = 20;
                     if (!(_iteratorAbruptCompletion && _iterator["return"] != null)) {
-                      _context10.next = 24;
+                      _context6.next = 24;
                       break;
                     }
-                    _context10.next = 24;
+                    _context6.next = 24;
                     return _awaitAsyncGenerator(_iterator["return"]());
                   case 24:
-                    _context10.prev = 24;
+                    _context6.prev = 24;
                     if (!_didIteratorError) {
-                      _context10.next = 27;
+                      _context6.next = 27;
                       break;
                     }
                     throw _iteratorError;
                   case 27:
-                    return _context10.finish(24);
+                    return _context6.finish(24);
                   case 28:
-                    return _context10.finish(19);
+                    return _context6.finish(19);
                   case 29:
                     processEndOfBody();
-                    _context10.next = 35;
+                    _context6.next = 35;
                     break;
                   case 32:
-                    _context10.prev = 32;
-                    _context10.t2 = _context10["catch"](0);
-                    _processBodyError2(_context10.t2);
+                    _context6.prev = 32;
+                    _context6.t2 = _context6["catch"](0);
+                    _processBodyError(_context6.t2);
                   case 35:
                   case "end":
-                    return _context10.stop();
+                    return _context6.stop();
                 }
-              }, _callee10, null, [[0, 32], [3, 15, 19, 29], [20,, 24, 28]]);
+              }, _callee6, null, [[0, 32], [3, 15, 19, 29], [20,, 24, 28]]);
             }))();
           }
-          _context16.prev = 16;
-          _context16.next = 19;
+          _context12.prev = 16;
+          _context12.next = 19;
           return dispatch({
             body: requestBody
           });
         case 19:
-          _yield$dispatch = _context16.sent;
+          _yield$dispatch = _context12.sent;
           body = _yield$dispatch.body;
           status = _yield$dispatch.status;
           statusText = _yield$dispatch.statusText;
@@ -18405,22 +17008,22 @@ function _httpNetworkFetch() {
               headersList: headersList
             });
           }
-          _context16.next = 34;
+          _context12.next = 34;
           break;
         case 28:
-          _context16.prev = 28;
-          _context16.t0 = _context16["catch"](16);
-          if (!(_context16.t0.name === 'AbortError')) {
-            _context16.next = 33;
+          _context12.prev = 28;
+          _context12.t0 = _context12["catch"](16);
+          if (!(_context12.t0.name === 'AbortError')) {
+            _context12.next = 33;
             break;
           }
           // 1. If connection uses HTTP/2, then transmit an RST_STREAM frame.
           fetchParams.controller.connection.destroy();
 
           // 2. Return the appropriate network error for fetchParams.
-          return _context16.abrupt("return", makeAppropriateNetworkError(fetchParams, _context16.t0));
+          return _context12.abrupt("return", makeAppropriateNetworkError(fetchParams, _context12.t0));
         case 33:
-          return _context16.abrupt("return", makeNetworkError(_context16.t0));
+          return _context12.abrupt("return", makeNetworkError(_context12.t0));
         case 34:
           // 11. Let pullAlgorithm be an action that resumes the ongoing fetch
           // if it is suspended.
@@ -18445,44 +17048,44 @@ function _httpNetworkFetch() {
           }
           stream = new ReadableStream({
             start: function start(controller) {
-              return _asyncToGenerator( /*#__PURE__*/_regeneratorRuntime().mark(function _callee11() {
-                return _regeneratorRuntime().wrap(function _callee11$(_context11) {
-                  while (1) switch (_context11.prev = _context11.next) {
+              return _asyncToGenerator( /*#__PURE__*/_regeneratorRuntime().mark(function _callee7() {
+                return _regeneratorRuntime().wrap(function _callee7$(_context7) {
+                  while (1) switch (_context7.prev = _context7.next) {
                     case 0:
                       fetchParams.controller.controller = controller;
                     case 1:
                     case "end":
-                      return _context11.stop();
+                      return _context7.stop();
                   }
-                }, _callee11);
+                }, _callee7);
               }))();
             },
             pull: function pull(controller) {
-              return _asyncToGenerator( /*#__PURE__*/_regeneratorRuntime().mark(function _callee12() {
-                return _regeneratorRuntime().wrap(function _callee12$(_context12) {
-                  while (1) switch (_context12.prev = _context12.next) {
+              return _asyncToGenerator( /*#__PURE__*/_regeneratorRuntime().mark(function _callee8() {
+                return _regeneratorRuntime().wrap(function _callee8$(_context8) {
+                  while (1) switch (_context8.prev = _context8.next) {
                     case 0:
-                      _context12.next = 2;
+                      _context8.next = 2;
                       return pullAlgorithm(controller);
                     case 2:
                     case "end":
-                      return _context12.stop();
+                      return _context8.stop();
                   }
-                }, _callee12);
+                }, _callee8);
               }))();
             },
             cancel: function cancel(reason) {
-              return _asyncToGenerator( /*#__PURE__*/_regeneratorRuntime().mark(function _callee13() {
-                return _regeneratorRuntime().wrap(function _callee13$(_context13) {
-                  while (1) switch (_context13.prev = _context13.next) {
+              return _asyncToGenerator( /*#__PURE__*/_regeneratorRuntime().mark(function _callee9() {
+                return _regeneratorRuntime().wrap(function _callee9$(_context9) {
+                  while (1) switch (_context9.prev = _context9.next) {
                     case 0:
-                      _context13.next = 2;
+                      _context9.next = 2;
                       return cancelAlgorithm(reason);
                     case 2:
                     case "end":
-                      return _context13.stop();
+                      return _context9.stop();
                   }
-                }, _callee13);
+                }, _callee9);
               }))();
             }
           }, {
@@ -18514,10 +17117,10 @@ function _httpNetworkFetch() {
 
           //    1. Run these steps, but abort when fetchParams is canceled:
           fetchParams.controller.on('terminated', onAborted);
-          fetchParams.controller.resume = /*#__PURE__*/_asyncToGenerator( /*#__PURE__*/_regeneratorRuntime().mark(function _callee14() {
+          fetchParams.controller.resume = /*#__PURE__*/_asyncToGenerator( /*#__PURE__*/_regeneratorRuntime().mark(function _callee10() {
             var _bytes$byteLength, _bytes, bytes, isFailure, _yield$fetchParams$co, done, value;
-            return _regeneratorRuntime().wrap(function _callee14$(_context14) {
-              while (1) switch (_context14.prev = _context14.next) {
+            return _regeneratorRuntime().wrap(function _callee10$(_context10) {
+              while (1) switch (_context10.prev = _context10.next) {
                 case 0:
                   if (false) {}
                   // 1-3. See onData...
@@ -18525,30 +17128,30 @@ function _httpNetworkFetch() {
                   // codings and bytes.
                   bytes = void 0;
                   isFailure = void 0;
-                  _context14.prev = 3;
-                  _context14.next = 6;
+                  _context10.prev = 3;
+                  _context10.next = 6;
                   return fetchParams.controller.next();
                 case 6:
-                  _yield$fetchParams$co = _context14.sent;
+                  _yield$fetchParams$co = _context10.sent;
                   done = _yield$fetchParams$co.done;
                   value = _yield$fetchParams$co.value;
                   if (!isAborted(fetchParams)) {
-                    _context14.next = 11;
+                    _context10.next = 11;
                     break;
                   }
-                  return _context14.abrupt("break", 33);
+                  return _context10.abrupt("break", 33);
                 case 11:
                   bytes = done ? undefined : value;
-                  _context14.next = 17;
+                  _context10.next = 17;
                   break;
                 case 14:
-                  _context14.prev = 14;
-                  _context14.t0 = _context14["catch"](3);
+                  _context10.prev = 14;
+                  _context10.t0 = _context10["catch"](3);
                   if (fetchParams.controller.ended && !timingInfo.encodedBodySize) {
                     // zlib doesn't like empty streams.
                     bytes = undefined;
                   } else {
-                    bytes = _context14.t0;
+                    bytes = _context10.t0;
 
                     // err may be propagated from the result of calling readablestream.cancel,
                     // which might not be an error. https://github.com/nodejs/undici/issues/2009
@@ -18556,7 +17159,7 @@ function _httpNetworkFetch() {
                   }
                 case 17:
                   if (!(bytes === undefined)) {
-                    _context14.next = 21;
+                    _context10.next = 21;
                     break;
                   }
                   // 2. Otherwise, if the bytes transmission for response’s message
@@ -18565,18 +17168,18 @@ function _httpNetworkFetch() {
                   // abort these in-parallel steps.
                   readableStreamClose(fetchParams.controller.controller);
                   finalizeResponse(fetchParams, response);
-                  return _context14.abrupt("return");
+                  return _context10.abrupt("return");
                 case 21:
                   // 5. Increase timingInfo’s decoded body size by bytes’s length.
                   timingInfo.decodedBodySize += (_bytes$byteLength = (_bytes = bytes) === null || _bytes === void 0 ? void 0 : _bytes.byteLength) !== null && _bytes$byteLength !== void 0 ? _bytes$byteLength : 0;
 
                   // 6. If bytes is failure, then terminate fetchParams’s controller.
                   if (!isFailure) {
-                    _context14.next = 25;
+                    _context10.next = 25;
                     break;
                   }
                   fetchParams.controller.terminate(bytes);
-                  return _context14.abrupt("return");
+                  return _context10.abrupt("return");
                 case 25:
                   // 7. Enqueue a Uint8Array wrapping an ArrayBuffer containing bytes
                   // into stream.
@@ -18584,34 +17187,34 @@ function _httpNetworkFetch() {
 
                   // 8. If stream is errored, then terminate the ongoing fetch.
                   if (!isErrored(stream)) {
-                    _context14.next = 29;
+                    _context10.next = 29;
                     break;
                   }
                   fetchParams.controller.terminate();
-                  return _context14.abrupt("return");
+                  return _context10.abrupt("return");
                 case 29:
                   if (fetchParams.controller.controller.desiredSize) {
-                    _context14.next = 31;
+                    _context10.next = 31;
                     break;
                   }
-                  return _context14.abrupt("return");
+                  return _context10.abrupt("return");
                 case 31:
-                  _context14.next = 0;
+                  _context10.next = 0;
                   break;
                 case 33:
                 case "end":
-                  return _context14.stop();
+                  return _context10.stop();
               }
-            }, _callee14, null, [[3, 14]]);
+            }, _callee10, null, [[3, 14]]);
           }));
 
           //    2. If aborted, then:
-          return _context16.abrupt("return", response);
+          return _context12.abrupt("return", response);
         case 42:
         case "end":
-          return _context16.stop();
+          return _context12.stop();
       }
-    }, _callee16, null, [[16, 28]]);
+    }, _callee12, null, [[16, 28]]);
   }));
   return _httpNetworkFetch.apply(this, arguments);
 }
@@ -18656,8 +17259,8 @@ var _require4 = __webpack_require__(6030),
   normalizeMethod = _require4.normalizeMethod,
   makePolicyContainer = _require4.makePolicyContainer;
 var _require5 = __webpack_require__(2654),
-  forbiddenMethods = _require5.forbiddenMethods,
-  corsSafeListedMethods = _require5.corsSafeListedMethods,
+  forbiddenMethodsSet = _require5.forbiddenMethodsSet,
+  corsSafeListedMethodsSet = _require5.corsSafeListedMethodsSet,
   referrerPolicy = _require5.referrerPolicy,
   requestRedirect = _require5.requestRedirect,
   requestMode = _require5.requestMode,
@@ -18969,10 +17572,10 @@ var Request = /*#__PURE__*/function () {
       // 2. If method is not a method or method is a forbidden method, then
       // throw a TypeError.
       if (!isValidHTTPToken(init.method)) {
-        throw TypeError("'".concat(init.method, "' is not a valid HTTP method."));
+        throw new TypeError("'".concat(init.method, "' is not a valid HTTP method."));
       }
-      if (forbiddenMethods.indexOf(method.toUpperCase()) !== -1) {
-        throw TypeError("'".concat(init.method, "' HTTP method is unsupported."));
+      if (forbiddenMethodsSet.has(method.toUpperCase())) {
+        throw new TypeError("'".concat(init.method, "' HTTP method is unsupported."));
       }
 
       // 3. Normalize method.
@@ -19050,7 +17653,7 @@ var Request = /*#__PURE__*/function () {
     if (mode === 'no-cors') {
       // 1. If this’s request’s method is not a CORS-safelisted method,
       // then throw a TypeError.
-      if (!corsSafeListedMethods.includes(request.method)) {
+      if (!corsSafeListedMethodsSet.has(request.method)) {
         throw new TypeError("'".concat(request.method, " is unsupported in no-cors mode."));
       }
 
@@ -19629,7 +18232,7 @@ var _require3 = __webpack_require__(6030),
   isErrorLike = _require3.isErrorLike,
   isomorphicEncode = _require3.isomorphicEncode;
 var _require4 = __webpack_require__(2654),
-  redirectStatus = _require4.redirectStatus,
+  redirectStatusSet = _require4.redirectStatusSet,
   nullBodyStatus = _require4.nullBodyStatus,
   DOMException = _require4.DOMException;
 var _require5 = __webpack_require__(102),
@@ -19651,6 +18254,7 @@ var assert = __webpack_require__(9491);
 var _require11 = __webpack_require__(3837),
   types = _require11.types;
 var ReadableStream = globalThis.ReadableStream || (__webpack_require__(5356).ReadableStream);
+var textEncoder = new TextEncoder('utf-8');
 
 // https://fetch.spec.whatwg.org/#response-class
 var Response = /*#__PURE__*/function () {
@@ -19854,7 +18458,7 @@ var Response = /*#__PURE__*/function () {
       }
 
       // 1. Let bytes the result of running serialize a JavaScript value to JSON bytes on data.
-      var bytes = new TextEncoder('utf-8').encode(serializeJavascriptValueToJSONString(data));
+      var bytes = textEncoder.encode(serializeJavascriptValueToJSONString(data));
 
       // 2. Let body be the result of extracting bytes.
       var body = extractBody(bytes);
@@ -19907,7 +18511,7 @@ var Response = /*#__PURE__*/function () {
       }
 
       // 3. If status is not a redirect status, then throw a RangeError.
-      if (!redirectStatus.includes(status)) {
+      if (!redirectStatusSet.has(status)) {
         throw new RangeError('Invalid status code ' + status);
       }
 
@@ -20237,9 +18841,9 @@ var _defineProperty = (__webpack_require__(8416)["default"]);
 var _wrapRegExp = (__webpack_require__(3344)["default"]);
 var _createForOfIteratorHelper = (__webpack_require__(4704)["default"]);
 var _require = __webpack_require__(2654),
-  redirectStatus = _require.redirectStatus,
-  badPorts = _require.badPorts,
-  referrerPolicyTokens = _require.referrerPolicy;
+  redirectStatusSet = _require.redirectStatusSet,
+  referrerPolicyTokens = _require.referrerPolicySet,
+  badPortsSet = _require.badPortsSet;
 var _require2 = __webpack_require__(2369),
   getGlobalOrigin = _require2.getGlobalOrigin;
 var _require3 = __webpack_require__(4074),
@@ -20270,7 +18874,7 @@ function responseURL(response) {
 // https://fetch.spec.whatwg.org/#concept-response-location-url
 function responseLocationURL(response, requestFragment) {
   // 1. If response’s status is not a redirect status, then return null.
-  if (!redirectStatus.includes(response.status)) {
+  if (!redirectStatusSet.has(response.status)) {
     return null;
   }
 
@@ -20304,7 +18908,7 @@ function requestBadPort(request) {
 
   // 2. If url’s scheme is an HTTP(S) scheme and url’s port is a bad port,
   // then return blocked.
-  if (urlIsHttpHttpsScheme(url) && badPorts.includes(url.port)) {
+  if (urlIsHttpHttpsScheme(url) && badPortsSet.has(url.port)) {
     return 'blocked';
   }
 
@@ -20337,31 +18941,58 @@ function isValidReasonPhrase(statusText) {
   }
   return true;
 }
-function isTokenChar(c) {
-  return !(c >= 0x7f || c <= 0x20 || c === '(' || c === ')' || c === '<' || c === '>' || c === '@' || c === ',' || c === ';' || c === ':' || c === '\\' || c === '"' || c === '/' || c === '[' || c === ']' || c === '?' || c === '=' || c === '{' || c === '}');
+
+/**
+ * @see https://tools.ietf.org/html/rfc7230#section-3.2.6
+ * @param {number} c
+ */
+function isTokenCharCode(c) {
+  switch (c) {
+    case 0x22:
+    case 0x28:
+    case 0x29:
+    case 0x2c:
+    case 0x2f:
+    case 0x3a:
+    case 0x3b:
+    case 0x3c:
+    case 0x3d:
+    case 0x3e:
+    case 0x3f:
+    case 0x40:
+    case 0x5b:
+    case 0x5c:
+    case 0x5d:
+    case 0x7b:
+    case 0x7d:
+      // DQUOTE and "(),/:;<=>?@[\]{}"
+      return false;
+    default:
+      // VCHAR %x21-7E
+      return c >= 0x21 && c <= 0x7e;
+  }
 }
 
-// See RFC 7230, Section 3.2.6.
-// https://github.com/chromium/chromium/blob/d7da0240cae77824d1eda25745c4022757499131/third_party/blink/renderer/platform/network/http_parsers.cc#L321
+/**
+ * @param {string} characters
+ */
 function isValidHTTPToken(characters) {
-  if (!characters || typeof characters !== 'string') {
+  if (characters.length === 0) {
     return false;
   }
   for (var i = 0; i < characters.length; ++i) {
-    var c = characters.charCodeAt(i);
-    if (c > 0x7f || !isTokenChar(c)) {
+    if (!isTokenCharCode(characters.charCodeAt(i))) {
       return false;
     }
   }
   return true;
 }
 
-// https://fetch.spec.whatwg.org/#header-name
-// https://github.com/chromium/chromium/blob/b3d37e6f94f87d59e44662d6078f6a12de845d17/net/http/http_util.cc#L342
+/**
+ * @see https://fetch.spec.whatwg.org/#header-name
+ * @param {string} potentialValue
+ */
 function isValidHeaderName(potentialValue) {
-  if (potentialValue.length === 0) {
-    return false;
-  }
   return isValidHTTPToken(potentialValue);
 }
 
@@ -20409,7 +19040,7 @@ function setRequestReferrerPolicyOnRedirect(request, actualResponse) {
     // The left-most policy is the fallback.
     for (var i = policyHeader.length; i !== 0; i--) {
       var token = policyHeader[i - 1].trim();
-      if (referrerPolicyTokens.includes(token)) {
+      if (referrerPolicyTokens.has(token)) {
         policy = token;
         break;
       }
@@ -21726,9 +20357,8 @@ webidl.converters.ByteString = function (V) {
   // 2. If the value of any element of x is greater than
   //    255, then throw a TypeError.
   for (var index = 0; index < x.length; index++) {
-    var charCode = x.charCodeAt(index);
-    if (charCode > 255) {
-      throw new TypeError('Cannot convert argument to a ByteString because the character at ' + "index ".concat(index, " has a value of ").concat(charCode, " which is greater than 255."));
+    if (x.charCodeAt(index) > 255) {
+      throw new TypeError('Cannot convert argument to a ByteString because the character at ' + "index ".concat(index, " has a value of ").concat(x.charCodeAt(index), " which is greater than 255."));
     }
   }
 
@@ -23486,6 +22116,302 @@ function cleanRequestHeaders(headers, removeContent, unknownOrigin) {
   return ret;
 }
 module.exports = RedirectHandler;
+
+/***/ }),
+
+/***/ 7570:
+/***/ ((module, __unused_webpack_exports, __webpack_require__) => {
+
+var _objectSpread = (__webpack_require__(2122)["default"]);
+var _objectWithoutProperties = (__webpack_require__(215)["default"]);
+var _classCallCheck = (__webpack_require__(6690)["default"]);
+var _createClass = (__webpack_require__(9728)["default"]);
+var _excluded = ["retryOptions"];
+var assert = __webpack_require__(8061);
+var _require = __webpack_require__(3329),
+  kRetryHandlerDefaultRetry = _require.kRetryHandlerDefaultRetry;
+var _require2 = __webpack_require__(7105),
+  RequestRetryError = _require2.RequestRetryError;
+var _require3 = __webpack_require__(3902),
+  isDisturbed = _require3.isDisturbed,
+  parseHeaders = _require3.parseHeaders,
+  parseRangeHeader = _require3.parseRangeHeader;
+function calculateRetryAfterHeader(retryAfter) {
+  var current = Date.now();
+  var diff = new Date(retryAfter).getTime() - current;
+  return diff;
+}
+var RetryHandler = /*#__PURE__*/function () {
+  "use strict";
+
+  function RetryHandler(opts, handlers) {
+    var _this = this;
+    _classCallCheck(this, RetryHandler);
+    var retryOptions = opts.retryOptions,
+      dispatchOpts = _objectWithoutProperties(opts, _excluded);
+    var _ref = retryOptions !== null && retryOptions !== void 0 ? retryOptions : {},
+      retryFn = _ref.retry,
+      maxRetries = _ref.maxRetries,
+      maxTimeout = _ref.maxTimeout,
+      minTimeout = _ref.minTimeout,
+      timeoutFactor = _ref.timeoutFactor,
+      methods = _ref.methods,
+      errorCodes = _ref.errorCodes,
+      retryAfter = _ref.retryAfter,
+      statusCodes = _ref.statusCodes;
+    this.dispatch = handlers.dispatch;
+    this.handler = handlers.handler;
+    this.opts = dispatchOpts;
+    this.abort = null;
+    this.aborted = false;
+    this.retryOpts = {
+      retry: retryFn !== null && retryFn !== void 0 ? retryFn : RetryHandler[kRetryHandlerDefaultRetry],
+      retryAfter: retryAfter !== null && retryAfter !== void 0 ? retryAfter : true,
+      maxTimeout: maxTimeout !== null && maxTimeout !== void 0 ? maxTimeout : 30 * 1000,
+      // 30s,
+      timeout: minTimeout !== null && minTimeout !== void 0 ? minTimeout : 500,
+      // .5s
+      timeoutFactor: timeoutFactor !== null && timeoutFactor !== void 0 ? timeoutFactor : 2,
+      maxRetries: maxRetries !== null && maxRetries !== void 0 ? maxRetries : 5,
+      // What errors we should retry
+      methods: methods !== null && methods !== void 0 ? methods : ['GET', 'HEAD', 'OPTIONS', 'PUT', 'DELETE', 'TRACE'],
+      // Indicates which errors to retry
+      statusCodes: statusCodes !== null && statusCodes !== void 0 ? statusCodes : [500, 502, 503, 504, 429],
+      // List of errors to retry
+      errorCodes: errorCodes !== null && errorCodes !== void 0 ? errorCodes : ['ECONNRESET', 'ECONNREFUSED', 'ENOTFOUND', 'ENETDOWN', 'ENETUNREACH', 'EHOSTDOWN', 'EHOSTUNREACH', 'EPIPE']
+    };
+    this.retryCount = 0;
+    this.start = 0;
+    this.end = null;
+    this.etag = null;
+    this.resume = null;
+
+    // Handle possible onConnect duplication
+    this.handler.onConnect(function (reason) {
+      _this.aborted = true;
+      if (_this.abort) {
+        _this.abort(reason);
+      } else {
+        _this.reason = reason;
+      }
+    });
+  }
+  _createClass(RetryHandler, [{
+    key: "onRequestSent",
+    value: function onRequestSent() {
+      if (this.handler.onRequestSent) {
+        this.handler.onRequestSent();
+      }
+    }
+  }, {
+    key: "onUpgrade",
+    value: function onUpgrade(statusCode, headers, socket) {
+      if (this.handler.onUpgrade) {
+        this.handler.onUpgrade(statusCode, headers, socket);
+      }
+    }
+  }, {
+    key: "onConnect",
+    value: function onConnect(abort) {
+      if (this.aborted) {
+        abort(this.reason);
+      } else {
+        this.abort = abort;
+      }
+    }
+  }, {
+    key: "onBodySent",
+    value: function onBodySent(chunk) {
+      return this.handler.onBodySent(chunk);
+    }
+  }, {
+    key: "onHeaders",
+    value: function onHeaders(statusCode, rawHeaders, resume, statusMessage) {
+      var headers = parseHeaders(rawHeaders);
+      this.retryCount += 1;
+      if (statusCode >= 300) {
+        this.abort(new RequestRetryError('Request failed', statusCode, {
+          headers: headers,
+          count: this.retryCount
+        }));
+        return false;
+      }
+
+      // Checkpoint for resume from where we left it
+      if (this.resume != null) {
+        this.resume = null;
+        if (statusCode !== 206) {
+          return true;
+        }
+        var contentRange = parseRangeHeader(headers['content-range']);
+        // If no content range
+        if (!contentRange) {
+          this.abort(new RequestRetryError('Content-Range mismatch', statusCode, {
+            headers: headers,
+            count: this.retryCount
+          }));
+          return false;
+        }
+
+        // Let's start with a weak etag check
+        if (this.etag != null && this.etag !== headers.etag) {
+          this.abort(new RequestRetryError('ETag mismatch', statusCode, {
+            headers: headers,
+            count: this.retryCount
+          }));
+          return false;
+        }
+        var start = contentRange.start,
+          size = contentRange.size,
+          _contentRange$end = contentRange.end,
+          end = _contentRange$end === void 0 ? size : _contentRange$end;
+        assert(this.start === start, 'content-range mismatch');
+        assert(this.end == null || this.end === end, 'content-range mismatch');
+        this.resume = resume;
+        return true;
+      }
+      if (this.end == null) {
+        if (statusCode === 206) {
+          // First time we receive 206
+          var range = parseRangeHeader(headers['content-range']);
+          if (range == null) {
+            return this.handler.onHeaders(statusCode, rawHeaders, resume, statusMessage);
+          }
+          var _start = range.start,
+            _size = range.size,
+            _range$end = range.end,
+            _end = _range$end === void 0 ? _size : _range$end;
+          assert(_start != null && Number.isFinite(_start) && this.start !== _start, 'content-range mismatch');
+          assert(Number.isFinite(_start));
+          assert(_end != null && Number.isFinite(_end) && this.end !== _end, 'invalid content-length');
+          this.start = _start;
+          this.end = _end;
+        }
+
+        // We make our best to checkpoint the body for further range headers
+        if (this.end == null) {
+          var contentLength = headers['content-length'];
+          this.end = contentLength != null ? Number(contentLength) : null;
+        }
+        assert(Number.isFinite(this.start));
+        assert(this.end == null || Number.isFinite(this.end), 'invalid content-length');
+        this.resume = resume;
+        this.etag = headers.etag != null ? headers.etag : null;
+        return this.handler.onHeaders(statusCode, rawHeaders, resume, statusMessage);
+      }
+      var err = new RequestRetryError('Request failed', statusCode, {
+        headers: headers,
+        count: this.retryCount
+      });
+      this.abort(err);
+      return false;
+    }
+  }, {
+    key: "onData",
+    value: function onData(chunk) {
+      this.start += chunk.length;
+      return this.handler.onData(chunk);
+    }
+  }, {
+    key: "onComplete",
+    value: function onComplete(rawTrailers) {
+      this.retryCount = 0;
+      return this.handler.onComplete(rawTrailers);
+    }
+  }, {
+    key: "onError",
+    value: function onError(err) {
+      if (this.aborted || isDisturbed(this.opts.body)) {
+        return this.handler.onError(err);
+      }
+      this.retryOpts.retry(err, {
+        state: {
+          counter: this.retryCount++,
+          currentTimeout: this.retryAfter
+        },
+        opts: _objectSpread({
+          retryOptions: this.retryOpts
+        }, this.opts)
+      }, onRetry.bind(this));
+      function onRetry(err) {
+        if (err != null || this.aborted || isDisturbed(this.opts.body)) {
+          return this.handler.onError(err);
+        }
+        if (this.start !== 0) {
+          var _this$end;
+          this.opts = _objectSpread(_objectSpread({}, this.opts), {}, {
+            headers: _objectSpread(_objectSpread({}, this.opts.headers), {}, {
+              range: "bytes=".concat(this.start, "-").concat((_this$end = this.end) !== null && _this$end !== void 0 ? _this$end : '')
+            })
+          });
+        }
+        try {
+          this.dispatch(this.opts, this);
+        } catch (err) {
+          this.handler.onError(err);
+        }
+      }
+    }
+  }], [{
+    key: kRetryHandlerDefaultRetry,
+    value: function value(err, _ref2, cb) {
+      var state = _ref2.state,
+        opts = _ref2.opts;
+      var statusCode = err.statusCode,
+        code = err.code,
+        headers = err.headers;
+      var method = opts.method,
+        retryOptions = opts.retryOptions;
+      var maxRetries = retryOptions.maxRetries,
+        timeout = retryOptions.timeout,
+        maxTimeout = retryOptions.maxTimeout,
+        timeoutFactor = retryOptions.timeoutFactor,
+        statusCodes = retryOptions.statusCodes,
+        errorCodes = retryOptions.errorCodes,
+        methods = retryOptions.methods;
+      var counter = state.counter,
+        currentTimeout = state.currentTimeout;
+      currentTimeout = currentTimeout != null && currentTimeout > 0 ? currentTimeout : timeout;
+
+      // Any code that is not a Undici's originated and allowed to retry
+      if (code && code !== 'UND_ERR_REQ_RETRY' && code !== 'UND_ERR_SOCKET' && !errorCodes.includes(code)) {
+        cb(err);
+        return;
+      }
+
+      // If a set of method are provided and the current method is not in the list
+      if (Array.isArray(methods) && !methods.includes(method)) {
+        cb(err);
+        return;
+      }
+
+      // If a set of status code are provided and the current status code is not in the list
+      if (statusCode != null && Array.isArray(statusCodes) && !statusCodes.includes(statusCode)) {
+        cb(err);
+        return;
+      }
+
+      // If we reached the max number of retries
+      if (counter > maxRetries) {
+        cb(err);
+        return;
+      }
+      var retryAfterHeader = headers != null && headers['retry-after'];
+      if (retryAfterHeader) {
+        retryAfterHeader = Number(retryAfterHeader);
+        retryAfterHeader = isNaN(retryAfterHeader) ? calculateRetryAfterHeader(retryAfterHeader) : retryAfterHeader * 1e3; // Retry-After is in seconds
+      }
+
+      var retryTimeout = retryAfterHeader > 0 ? Math.min(retryAfterHeader, maxTimeout) : Math.min(currentTimeout * Math.pow(timeoutFactor, counter), maxTimeout);
+      state.currentTimeout = retryTimeout;
+      setTimeout(function () {
+        return cb(null);
+      }, retryTimeout);
+    }
+  }]);
+  return RetryHandler;
+}();
+module.exports = RetryHandler;
 
 /***/ }),
 
@@ -25660,7 +24586,7 @@ var Pool = /*#__PURE__*/function (_PoolBase) {
         maxCachedSessions: maxCachedSessions,
         allowH2: allowH2,
         socketPath: socketPath,
-        timeout: connectTimeout == null ? 10e3 : connectTimeout
+        timeout: connectTimeout
       }, util.nodeHasAutoSelectFamily && autoSelectFamily ? {
         autoSelectFamily: autoSelectFamily,
         autoSelectFamilyAttemptTimeout: autoSelectFamilyAttemptTimeout
@@ -26447,7 +25373,6 @@ var _wrapNativeSuper = (__webpack_require__(3496)["default"]);
 var _classPrivateFieldInitSpec = (__webpack_require__(9159)["default"]);
 var _classPrivateFieldGet = (__webpack_require__(468)["default"]);
 var _classPrivateFieldSet = (__webpack_require__(5661)["default"]);
-var _Object$definePropert, _Object$definePropert2, _Object$definePropert3;
 var _require = __webpack_require__(3441),
   webidl = _require.webidl;
 var _require2 = __webpack_require__(3902),
@@ -26638,18 +25563,18 @@ var ErrorEvent = /*#__PURE__*/function (_Event3) {
   }]);
   return ErrorEvent;
 }( /*#__PURE__*/_wrapNativeSuper(Event));
-Object.defineProperties(MessageEvent.prototype, (_Object$definePropert = {}, _defineProperty(_Object$definePropert, Symbol.toStringTag, {
+Object.defineProperties(MessageEvent.prototype, _defineProperty(_defineProperty(_defineProperty(_defineProperty(_defineProperty(_defineProperty(_defineProperty({}, Symbol.toStringTag, {
   value: 'MessageEvent',
   configurable: true
-}), _defineProperty(_Object$definePropert, "data", kEnumerableProperty), _defineProperty(_Object$definePropert, "origin", kEnumerableProperty), _defineProperty(_Object$definePropert, "lastEventId", kEnumerableProperty), _defineProperty(_Object$definePropert, "source", kEnumerableProperty), _defineProperty(_Object$definePropert, "ports", kEnumerableProperty), _defineProperty(_Object$definePropert, "initMessageEvent", kEnumerableProperty), _Object$definePropert));
-Object.defineProperties(CloseEvent.prototype, (_Object$definePropert2 = {}, _defineProperty(_Object$definePropert2, Symbol.toStringTag, {
+}), "data", kEnumerableProperty), "origin", kEnumerableProperty), "lastEventId", kEnumerableProperty), "source", kEnumerableProperty), "ports", kEnumerableProperty), "initMessageEvent", kEnumerableProperty));
+Object.defineProperties(CloseEvent.prototype, _defineProperty(_defineProperty(_defineProperty(_defineProperty({}, Symbol.toStringTag, {
   value: 'CloseEvent',
   configurable: true
-}), _defineProperty(_Object$definePropert2, "reason", kEnumerableProperty), _defineProperty(_Object$definePropert2, "code", kEnumerableProperty), _defineProperty(_Object$definePropert2, "wasClean", kEnumerableProperty), _Object$definePropert2));
-Object.defineProperties(ErrorEvent.prototype, (_Object$definePropert3 = {}, _defineProperty(_Object$definePropert3, Symbol.toStringTag, {
+}), "reason", kEnumerableProperty), "code", kEnumerableProperty), "wasClean", kEnumerableProperty));
+Object.defineProperties(ErrorEvent.prototype, _defineProperty(_defineProperty(_defineProperty(_defineProperty(_defineProperty(_defineProperty({}, Symbol.toStringTag, {
   value: 'ErrorEvent',
   configurable: true
-}), _defineProperty(_Object$definePropert3, "message", kEnumerableProperty), _defineProperty(_Object$definePropert3, "filename", kEnumerableProperty), _defineProperty(_Object$definePropert3, "lineno", kEnumerableProperty), _defineProperty(_Object$definePropert3, "colno", kEnumerableProperty), _defineProperty(_Object$definePropert3, "error", kEnumerableProperty), _Object$definePropert3));
+}), "message", kEnumerableProperty), "filename", kEnumerableProperty), "lineno", kEnumerableProperty), "colno", kEnumerableProperty), "error", kEnumerableProperty));
 webidl.converters.MessagePort = webidl.interfaceConverter(MessagePort);
 webidl.converters['sequence<MessagePort>'] = webidl.sequenceConverter(webidl.converters.MessagePort);
 var eventInit = [{
@@ -28465,6 +27390,14 @@ module.exports = require("net");
 
 /***/ }),
 
+/***/ 8061:
+/***/ ((module) => {
+
+"use strict";
+module.exports = require("node:assert");
+
+/***/ }),
+
 /***/ 5673:
 /***/ ((module) => {
 
@@ -29926,6 +28859,1973 @@ function _wrapRegExp() {
   }, _wrapRegExp.apply(this, arguments);
 }
 module.exports = _wrapRegExp, module.exports.__esModule = true, module.exports["default"] = module.exports;
+
+/***/ }),
+
+/***/ 9968:
+/***/ ((module, __unused_webpack_exports, __webpack_require__) => {
+
+"use strict";
+
+
+var WritableStream = (__webpack_require__(4492).Writable);
+var inherits = (__webpack_require__(7261).inherits);
+var StreamSearch = __webpack_require__(7581);
+var PartStream = __webpack_require__(5305);
+var HeaderParser = __webpack_require__(2651);
+var DASH = 45;
+var B_ONEDASH = Buffer.from('-');
+var B_CRLF = Buffer.from('\r\n');
+var EMPTY_FN = function EMPTY_FN() {};
+function Dicer(cfg) {
+  if (!(this instanceof Dicer)) {
+    return new Dicer(cfg);
+  }
+  WritableStream.call(this, cfg);
+  if (!cfg || !cfg.headerFirst && typeof cfg.boundary !== 'string') {
+    throw new TypeError('Boundary required');
+  }
+  if (typeof cfg.boundary === 'string') {
+    this.setBoundary(cfg.boundary);
+  } else {
+    this._bparser = undefined;
+  }
+  this._headerFirst = cfg.headerFirst;
+  this._dashes = 0;
+  this._parts = 0;
+  this._finished = false;
+  this._realFinish = false;
+  this._isPreamble = true;
+  this._justMatched = false;
+  this._firstWrite = true;
+  this._inHeader = true;
+  this._part = undefined;
+  this._cb = undefined;
+  this._ignoreData = false;
+  this._partOpts = {
+    highWaterMark: cfg.partHwm
+  };
+  this._pause = false;
+  var self = this;
+  this._hparser = new HeaderParser(cfg);
+  this._hparser.on('header', function (header) {
+    self._inHeader = false;
+    self._part.emit('header', header);
+  });
+}
+inherits(Dicer, WritableStream);
+Dicer.prototype.emit = function (ev) {
+  if (ev === 'finish' && !this._realFinish) {
+    if (!this._finished) {
+      var self = this;
+      process.nextTick(function () {
+        self.emit('error', new Error('Unexpected end of multipart data'));
+        if (self._part && !self._ignoreData) {
+          var type = self._isPreamble ? 'Preamble' : 'Part';
+          self._part.emit('error', new Error(type + ' terminated early due to unexpected end of multipart data'));
+          self._part.push(null);
+          process.nextTick(function () {
+            self._realFinish = true;
+            self.emit('finish');
+            self._realFinish = false;
+          });
+          return;
+        }
+        self._realFinish = true;
+        self.emit('finish');
+        self._realFinish = false;
+      });
+    }
+  } else {
+    WritableStream.prototype.emit.apply(this, arguments);
+  }
+};
+Dicer.prototype._write = function (data, encoding, cb) {
+  // ignore unexpected data (e.g. extra trailer data after finished)
+  if (!this._hparser && !this._bparser) {
+    return cb();
+  }
+  if (this._headerFirst && this._isPreamble) {
+    if (!this._part) {
+      this._part = new PartStream(this._partOpts);
+      if (this._events.preamble) {
+        this.emit('preamble', this._part);
+      } else {
+        this._ignore();
+      }
+    }
+    var r = this._hparser.push(data);
+    if (!this._inHeader && r !== undefined && r < data.length) {
+      data = data.slice(r);
+    } else {
+      return cb();
+    }
+  }
+
+  // allows for "easier" testing
+  if (this._firstWrite) {
+    this._bparser.push(B_CRLF);
+    this._firstWrite = false;
+  }
+  this._bparser.push(data);
+  if (this._pause) {
+    this._cb = cb;
+  } else {
+    cb();
+  }
+};
+Dicer.prototype.reset = function () {
+  this._part = undefined;
+  this._bparser = undefined;
+  this._hparser = undefined;
+};
+Dicer.prototype.setBoundary = function (boundary) {
+  var self = this;
+  this._bparser = new StreamSearch('\r\n--' + boundary);
+  this._bparser.on('info', function (isMatch, data, start, end) {
+    self._oninfo(isMatch, data, start, end);
+  });
+};
+Dicer.prototype._ignore = function () {
+  if (this._part && !this._ignoreData) {
+    this._ignoreData = true;
+    this._part.on('error', EMPTY_FN);
+    // we must perform some kind of read on the stream even though we are
+    // ignoring the data, otherwise node's Readable stream will not emit 'end'
+    // after pushing null to the stream
+    this._part.resume();
+  }
+};
+Dicer.prototype._oninfo = function (isMatch, data, start, end) {
+  var buf;
+  var self = this;
+  var i = 0;
+  var r;
+  var shouldWriteMore = true;
+  if (!this._part && this._justMatched && data) {
+    while (this._dashes < 2 && start + i < end) {
+      if (data[start + i] === DASH) {
+        ++i;
+        ++this._dashes;
+      } else {
+        if (this._dashes) {
+          buf = B_ONEDASH;
+        }
+        this._dashes = 0;
+        break;
+      }
+    }
+    if (this._dashes === 2) {
+      if (start + i < end && this._events.trailer) {
+        this.emit('trailer', data.slice(start + i, end));
+      }
+      this.reset();
+      this._finished = true;
+      // no more parts will be added
+      if (self._parts === 0) {
+        self._realFinish = true;
+        self.emit('finish');
+        self._realFinish = false;
+      }
+    }
+    if (this._dashes) {
+      return;
+    }
+  }
+  if (this._justMatched) {
+    this._justMatched = false;
+  }
+  if (!this._part) {
+    this._part = new PartStream(this._partOpts);
+    this._part._read = function (n) {
+      self._unpause();
+    };
+    if (this._isPreamble && this._events.preamble) {
+      this.emit('preamble', this._part);
+    } else if (this._isPreamble !== true && this._events.part) {
+      this.emit('part', this._part);
+    } else {
+      this._ignore();
+    }
+    if (!this._isPreamble) {
+      this._inHeader = true;
+    }
+  }
+  if (data && start < end && !this._ignoreData) {
+    if (this._isPreamble || !this._inHeader) {
+      if (buf) {
+        shouldWriteMore = this._part.push(buf);
+      }
+      shouldWriteMore = this._part.push(data.slice(start, end));
+      if (!shouldWriteMore) {
+        this._pause = true;
+      }
+    } else if (!this._isPreamble && this._inHeader) {
+      if (buf) {
+        this._hparser.push(buf);
+      }
+      r = this._hparser.push(data.slice(start, end));
+      if (!this._inHeader && r !== undefined && r < end) {
+        this._oninfo(false, data, start + r, end);
+      }
+    }
+  }
+  if (isMatch) {
+    this._hparser.reset();
+    if (this._isPreamble) {
+      this._isPreamble = false;
+    } else {
+      if (start !== end) {
+        ++this._parts;
+        this._part.on('end', function () {
+          if (--self._parts === 0) {
+            if (self._finished) {
+              self._realFinish = true;
+              self.emit('finish');
+              self._realFinish = false;
+            } else {
+              self._unpause();
+            }
+          }
+        });
+      }
+    }
+    this._part.push(null);
+    this._part = undefined;
+    this._ignoreData = false;
+    this._justMatched = true;
+    this._dashes = 0;
+  }
+};
+Dicer.prototype._unpause = function () {
+  if (!this._pause) {
+    return;
+  }
+  this._pause = false;
+  if (this._cb) {
+    var cb = this._cb;
+    this._cb = undefined;
+    cb();
+  }
+};
+module.exports = Dicer;
+
+/***/ }),
+
+/***/ 2651:
+/***/ ((module, __unused_webpack_exports, __webpack_require__) => {
+
+"use strict";
+
+
+var EventEmitter = (__webpack_require__(5673).EventEmitter);
+var inherits = (__webpack_require__(7261).inherits);
+var getLimit = __webpack_require__(3524);
+var StreamSearch = __webpack_require__(7581);
+var B_DCRLF = Buffer.from('\r\n\r\n');
+var RE_CRLF = /\r\n/g;
+var RE_HDR = /^([^:]+):[ \t]?([\x00-\xFF]+)?$/; // eslint-disable-line no-control-regex
+
+function HeaderParser(cfg) {
+  EventEmitter.call(this);
+  cfg = cfg || {};
+  var self = this;
+  this.nread = 0;
+  this.maxed = false;
+  this.npairs = 0;
+  this.maxHeaderPairs = getLimit(cfg, 'maxHeaderPairs', 2000);
+  this.maxHeaderSize = getLimit(cfg, 'maxHeaderSize', 80 * 1024);
+  this.buffer = '';
+  this.header = {};
+  this.finished = false;
+  this.ss = new StreamSearch(B_DCRLF);
+  this.ss.on('info', function (isMatch, data, start, end) {
+    if (data && !self.maxed) {
+      if (self.nread + end - start >= self.maxHeaderSize) {
+        end = self.maxHeaderSize - self.nread + start;
+        self.nread = self.maxHeaderSize;
+        self.maxed = true;
+      } else {
+        self.nread += end - start;
+      }
+      self.buffer += data.toString('binary', start, end);
+    }
+    if (isMatch) {
+      self._finish();
+    }
+  });
+}
+inherits(HeaderParser, EventEmitter);
+HeaderParser.prototype.push = function (data) {
+  var r = this.ss.push(data);
+  if (this.finished) {
+    return r;
+  }
+};
+HeaderParser.prototype.reset = function () {
+  this.finished = false;
+  this.buffer = '';
+  this.header = {};
+  this.ss.reset();
+};
+HeaderParser.prototype._finish = function () {
+  if (this.buffer) {
+    this._parseHeader();
+  }
+  this.ss.matches = this.ss.maxMatches;
+  var header = this.header;
+  this.header = {};
+  this.buffer = '';
+  this.finished = true;
+  this.nread = this.npairs = 0;
+  this.maxed = false;
+  this.emit('header', header);
+};
+HeaderParser.prototype._parseHeader = function () {
+  if (this.npairs === this.maxHeaderPairs) {
+    return;
+  }
+  var lines = this.buffer.split(RE_CRLF);
+  var len = lines.length;
+  var m, h;
+  for (var i = 0; i < len; ++i) {
+    // eslint-disable-line no-var
+    if (lines[i].length === 0) {
+      continue;
+    }
+    if (lines[i][0] === '\t' || lines[i][0] === ' ') {
+      // folded header content
+      // RFC2822 says to just remove the CRLF and not the whitespace following
+      // it, so we follow the RFC and include the leading whitespace ...
+      if (h) {
+        this.header[h][this.header[h].length - 1] += lines[i];
+        continue;
+      }
+    }
+    var posColon = lines[i].indexOf(':');
+    if (posColon === -1 || posColon === 0) {
+      return;
+    }
+    m = RE_HDR.exec(lines[i]);
+    h = m[1].toLowerCase();
+    this.header[h] = this.header[h] || [];
+    this.header[h].push(m[2] || '');
+    if (++this.npairs === this.maxHeaderPairs) {
+      break;
+    }
+  }
+};
+module.exports = HeaderParser;
+
+/***/ }),
+
+/***/ 5305:
+/***/ ((module, __unused_webpack_exports, __webpack_require__) => {
+
+"use strict";
+
+
+var inherits = (__webpack_require__(7261).inherits);
+var ReadableStream = (__webpack_require__(4492).Readable);
+function PartStream(opts) {
+  ReadableStream.call(this, opts);
+}
+inherits(PartStream, ReadableStream);
+PartStream.prototype._read = function (n) {};
+module.exports = PartStream;
+
+/***/ }),
+
+/***/ 7581:
+/***/ ((module, __unused_webpack_exports, __webpack_require__) => {
+
+"use strict";
+
+
+/**
+ * Copyright Brian White. All rights reserved.
+ *
+ * @see https://github.com/mscdex/streamsearch
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to
+ * deal in the Software without restriction, including without limitation the
+ * rights to use, copy, modify, merge, publish, distribute, sublicense, and/or
+ * sell copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in
+ * all copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+ * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
+ * IN THE SOFTWARE.
+ *
+ * Based heavily on the Streaming Boyer-Moore-Horspool C++ implementation
+ * by Hongli Lai at: https://github.com/FooBarWidget/boyer-moore-horspool
+ */
+var EventEmitter = (__webpack_require__(5673).EventEmitter);
+var inherits = (__webpack_require__(7261).inherits);
+function SBMH(needle) {
+  if (typeof needle === 'string') {
+    needle = Buffer.from(needle);
+  }
+  if (!Buffer.isBuffer(needle)) {
+    throw new TypeError('The needle has to be a String or a Buffer.');
+  }
+  var needleLength = needle.length;
+  if (needleLength === 0) {
+    throw new Error('The needle cannot be an empty String/Buffer.');
+  }
+  if (needleLength > 256) {
+    throw new Error('The needle cannot have a length bigger than 256.');
+  }
+  this.maxMatches = Infinity;
+  this.matches = 0;
+  this._occ = new Array(256).fill(needleLength); // Initialize occurrence table.
+  this._lookbehind_size = 0;
+  this._needle = needle;
+  this._bufpos = 0;
+  this._lookbehind = Buffer.alloc(needleLength);
+
+  // Populate occurrence table with analysis of the needle,
+  // ignoring last letter.
+  for (var i = 0; i < needleLength - 1; ++i) {
+    // eslint-disable-line no-var
+    this._occ[needle[i]] = needleLength - 1 - i;
+  }
+}
+inherits(SBMH, EventEmitter);
+SBMH.prototype.reset = function () {
+  this._lookbehind_size = 0;
+  this.matches = 0;
+  this._bufpos = 0;
+};
+SBMH.prototype.push = function (chunk, pos) {
+  if (!Buffer.isBuffer(chunk)) {
+    chunk = Buffer.from(chunk, 'binary');
+  }
+  var chlen = chunk.length;
+  this._bufpos = pos || 0;
+  var r;
+  while (r !== chlen && this.matches < this.maxMatches) {
+    r = this._sbmh_feed(chunk);
+  }
+  return r;
+};
+SBMH.prototype._sbmh_feed = function (data) {
+  var len = data.length;
+  var needle = this._needle;
+  var needleLength = needle.length;
+  var lastNeedleChar = needle[needleLength - 1];
+
+  // Positive: points to a position in `data`
+  //           pos == 3 points to data[3]
+  // Negative: points to a position in the lookbehind buffer
+  //           pos == -2 points to lookbehind[lookbehind_size - 2]
+  var pos = -this._lookbehind_size;
+  var ch;
+  if (pos < 0) {
+    // Lookbehind buffer is not empty. Perform Boyer-Moore-Horspool
+    // search with character lookup code that considers both the
+    // lookbehind buffer and the current round's haystack data.
+    //
+    // Loop until
+    //   there is a match.
+    // or until
+    //   we've moved past the position that requires the
+    //   lookbehind buffer. In this case we switch to the
+    //   optimized loop.
+    // or until
+    //   the character to look at lies outside the haystack.
+    while (pos < 0 && pos <= len - needleLength) {
+      ch = this._sbmh_lookup_char(data, pos + needleLength - 1);
+      if (ch === lastNeedleChar && this._sbmh_memcmp(data, pos, needleLength - 1)) {
+        this._lookbehind_size = 0;
+        ++this.matches;
+        this.emit('info', true);
+        return this._bufpos = pos + needleLength;
+      }
+      pos += this._occ[ch];
+    }
+
+    // No match.
+
+    if (pos < 0) {
+      // There's too few data for Boyer-Moore-Horspool to run,
+      // so let's use a different algorithm to skip as much as
+      // we can.
+      // Forward pos until
+      //   the trailing part of lookbehind + data
+      //   looks like the beginning of the needle
+      // or until
+      //   pos == 0
+      while (pos < 0 && !this._sbmh_memcmp(data, pos, len - pos)) {
+        ++pos;
+      }
+    }
+    if (pos >= 0) {
+      // Discard lookbehind buffer.
+      this.emit('info', false, this._lookbehind, 0, this._lookbehind_size);
+      this._lookbehind_size = 0;
+    } else {
+      // Cut off part of the lookbehind buffer that has
+      // been processed and append the entire haystack
+      // into it.
+      var bytesToCutOff = this._lookbehind_size + pos;
+      if (bytesToCutOff > 0) {
+        // The cut off data is guaranteed not to contain the needle.
+        this.emit('info', false, this._lookbehind, 0, bytesToCutOff);
+      }
+      this._lookbehind.copy(this._lookbehind, 0, bytesToCutOff, this._lookbehind_size - bytesToCutOff);
+      this._lookbehind_size -= bytesToCutOff;
+      data.copy(this._lookbehind, this._lookbehind_size);
+      this._lookbehind_size += len;
+      this._bufpos = len;
+      return len;
+    }
+  }
+  pos += (pos >= 0) * this._bufpos;
+
+  // Lookbehind buffer is now empty. We only need to check if the
+  // needle is in the haystack.
+  if (data.indexOf(needle, pos) !== -1) {
+    pos = data.indexOf(needle, pos);
+    ++this.matches;
+    if (pos > 0) {
+      this.emit('info', true, data, this._bufpos, pos);
+    } else {
+      this.emit('info', true);
+    }
+    return this._bufpos = pos + needleLength;
+  } else {
+    pos = len - needleLength;
+  }
+
+  // There was no match. If there's trailing haystack data that we cannot
+  // match yet using the Boyer-Moore-Horspool algorithm (because the trailing
+  // data is less than the needle size) then match using a modified
+  // algorithm that starts matching from the beginning instead of the end.
+  // Whatever trailing data is left after running this algorithm is added to
+  // the lookbehind buffer.
+  while (pos < len && (data[pos] !== needle[0] || Buffer.compare(data.subarray(pos, pos + len - pos), needle.subarray(0, len - pos)) !== 0)) {
+    ++pos;
+  }
+  if (pos < len) {
+    data.copy(this._lookbehind, 0, pos, pos + (len - pos));
+    this._lookbehind_size = len - pos;
+  }
+
+  // Everything until pos is guaranteed not to contain needle data.
+  if (pos > 0) {
+    this.emit('info', false, data, this._bufpos, pos < len ? pos : len);
+  }
+  this._bufpos = len;
+  return len;
+};
+SBMH.prototype._sbmh_lookup_char = function (data, pos) {
+  return pos < 0 ? this._lookbehind[this._lookbehind_size + pos] : data[pos];
+};
+SBMH.prototype._sbmh_memcmp = function (data, pos, len) {
+  for (var i = 0; i < len; ++i) {
+    // eslint-disable-line no-var
+    if (this._sbmh_lookup_char(data, pos + i) !== this._needle[i]) {
+      return false;
+    }
+  }
+  return true;
+};
+module.exports = SBMH;
+
+/***/ }),
+
+/***/ 7988:
+/***/ ((module, __unused_webpack_exports, __webpack_require__) => {
+
+"use strict";
+
+
+var _objectSpread = (__webpack_require__(2122)["default"]);
+var _objectWithoutProperties = (__webpack_require__(215)["default"]);
+var _excluded = ["headers"];
+var WritableStream = (__webpack_require__(4492).Writable);
+var _require = __webpack_require__(7261),
+  inherits = _require.inherits;
+var Dicer = __webpack_require__(9968);
+var MultipartParser = __webpack_require__(7194);
+var UrlencodedParser = __webpack_require__(4763);
+var parseParams = __webpack_require__(529);
+function Busboy(opts) {
+  if (!(this instanceof Busboy)) {
+    return new Busboy(opts);
+  }
+  if (typeof opts !== 'object') {
+    throw new TypeError('Busboy expected an options-Object.');
+  }
+  if (typeof opts.headers !== 'object') {
+    throw new TypeError('Busboy expected an options-Object with headers-attribute.');
+  }
+  if (typeof opts.headers['content-type'] !== 'string') {
+    throw new TypeError('Missing Content-Type-header.');
+  }
+  var headers = opts.headers,
+    streamOptions = _objectWithoutProperties(opts, _excluded);
+  this.opts = _objectSpread({
+    autoDestroy: false
+  }, streamOptions);
+  WritableStream.call(this, this.opts);
+  this._done = false;
+  this._parser = this.getParserByHeaders(headers);
+  this._finished = false;
+}
+inherits(Busboy, WritableStream);
+Busboy.prototype.emit = function (ev) {
+  if (ev === 'finish') {
+    if (!this._done) {
+      var _this$_parser;
+      (_this$_parser = this._parser) === null || _this$_parser === void 0 || _this$_parser.end();
+      return;
+    } else if (this._finished) {
+      return;
+    }
+    this._finished = true;
+  }
+  WritableStream.prototype.emit.apply(this, arguments);
+};
+Busboy.prototype.getParserByHeaders = function (headers) {
+  var parsed = parseParams(headers['content-type']);
+  var cfg = {
+    defCharset: this.opts.defCharset,
+    fileHwm: this.opts.fileHwm,
+    headers: headers,
+    highWaterMark: this.opts.highWaterMark,
+    isPartAFile: this.opts.isPartAFile,
+    limits: this.opts.limits,
+    parsedConType: parsed,
+    preservePath: this.opts.preservePath
+  };
+  if (MultipartParser.detect.test(parsed[0])) {
+    return new MultipartParser(this, cfg);
+  }
+  if (UrlencodedParser.detect.test(parsed[0])) {
+    return new UrlencodedParser(this, cfg);
+  }
+  throw new Error('Unsupported Content-Type.');
+};
+Busboy.prototype._write = function (chunk, encoding, cb) {
+  this._parser.write(chunk, cb);
+};
+module.exports = Busboy;
+module.exports["default"] = Busboy;
+module.exports.Busboy = Busboy;
+module.exports.Dicer = Dicer;
+
+/***/ }),
+
+/***/ 7194:
+/***/ ((module, __unused_webpack_exports, __webpack_require__) => {
+
+"use strict";
+
+
+// TODO:
+//  * support 1 nested multipart level
+//    (see second multipart example here:
+//     http://www.w3.org/TR/html401/interact/forms.html#didx-multipartform-data)
+//  * support limits.fieldNameSize
+//     -- this will require modifications to utils.parseParams
+var _require = __webpack_require__(4492),
+  Readable = _require.Readable;
+var _require2 = __webpack_require__(7261),
+  inherits = _require2.inherits;
+var Dicer = __webpack_require__(9968);
+var parseParams = __webpack_require__(529);
+var decodeText = __webpack_require__(8362);
+var basename = __webpack_require__(5822);
+var getLimit = __webpack_require__(3524);
+var RE_BOUNDARY = /^boundary$/i;
+var RE_FIELD = /^form-data$/i;
+var RE_CHARSET = /^charset$/i;
+var RE_FILENAME = /^filename$/i;
+var RE_NAME = /^name$/i;
+Multipart.detect = /^multipart\/form-data/i;
+function Multipart(boy, cfg) {
+  var i;
+  var len;
+  var self = this;
+  var boundary;
+  var limits = cfg.limits;
+  var isPartAFile = cfg.isPartAFile || function (fieldName, contentType, fileName) {
+    return contentType === 'application/octet-stream' || fileName !== undefined;
+  };
+  var parsedConType = cfg.parsedConType || [];
+  var defCharset = cfg.defCharset || 'utf8';
+  var preservePath = cfg.preservePath;
+  var fileOpts = {
+    highWaterMark: cfg.fileHwm
+  };
+  for (i = 0, len = parsedConType.length; i < len; ++i) {
+    if (Array.isArray(parsedConType[i]) && RE_BOUNDARY.test(parsedConType[i][0])) {
+      boundary = parsedConType[i][1];
+      break;
+    }
+  }
+  function checkFinished() {
+    if (nends === 0 && finished && !boy._done) {
+      finished = false;
+      self.end();
+    }
+  }
+  if (typeof boundary !== 'string') {
+    throw new Error('Multipart: Boundary not found');
+  }
+  var fieldSizeLimit = getLimit(limits, 'fieldSize', 1 * 1024 * 1024);
+  var fileSizeLimit = getLimit(limits, 'fileSize', Infinity);
+  var filesLimit = getLimit(limits, 'files', Infinity);
+  var fieldsLimit = getLimit(limits, 'fields', Infinity);
+  var partsLimit = getLimit(limits, 'parts', Infinity);
+  var headerPairsLimit = getLimit(limits, 'headerPairs', 2000);
+  var headerSizeLimit = getLimit(limits, 'headerSize', 80 * 1024);
+  var nfiles = 0;
+  var nfields = 0;
+  var nends = 0;
+  var curFile;
+  var curField;
+  var finished = false;
+  this._needDrain = false;
+  this._pause = false;
+  this._cb = undefined;
+  this._nparts = 0;
+  this._boy = boy;
+  var parserCfg = {
+    boundary: boundary,
+    maxHeaderPairs: headerPairsLimit,
+    maxHeaderSize: headerSizeLimit,
+    partHwm: fileOpts.highWaterMark,
+    highWaterMark: cfg.highWaterMark
+  };
+  this.parser = new Dicer(parserCfg);
+  this.parser.on('drain', function () {
+    self._needDrain = false;
+    if (self._cb && !self._pause) {
+      var cb = self._cb;
+      self._cb = undefined;
+      cb();
+    }
+  }).on('part', function onPart(part) {
+    if (++self._nparts > partsLimit) {
+      self.parser.removeListener('part', onPart);
+      self.parser.on('part', skipPart);
+      boy.hitPartsLimit = true;
+      boy.emit('partsLimit');
+      return skipPart(part);
+    }
+
+    // hack because streams2 _always_ doesn't emit 'end' until nextTick, so let
+    // us emit 'end' early since we know the part has ended if we are already
+    // seeing the next part
+    if (curField) {
+      var field = curField;
+      field.emit('end');
+      field.removeAllListeners('end');
+    }
+    part.on('header', function (header) {
+      var contype;
+      var fieldname;
+      var parsed;
+      var charset;
+      var encoding;
+      var filename;
+      var nsize = 0;
+      if (header['content-type']) {
+        parsed = parseParams(header['content-type'][0]);
+        if (parsed[0]) {
+          contype = parsed[0].toLowerCase();
+          for (i = 0, len = parsed.length; i < len; ++i) {
+            if (RE_CHARSET.test(parsed[i][0])) {
+              charset = parsed[i][1].toLowerCase();
+              break;
+            }
+          }
+        }
+      }
+      if (contype === undefined) {
+        contype = 'text/plain';
+      }
+      if (charset === undefined) {
+        charset = defCharset;
+      }
+      if (header['content-disposition']) {
+        parsed = parseParams(header['content-disposition'][0]);
+        if (!RE_FIELD.test(parsed[0])) {
+          return skipPart(part);
+        }
+        for (i = 0, len = parsed.length; i < len; ++i) {
+          if (RE_NAME.test(parsed[i][0])) {
+            fieldname = parsed[i][1];
+          } else if (RE_FILENAME.test(parsed[i][0])) {
+            filename = parsed[i][1];
+            if (!preservePath) {
+              filename = basename(filename);
+            }
+          }
+        }
+      } else {
+        return skipPart(part);
+      }
+      if (header['content-transfer-encoding']) {
+        encoding = header['content-transfer-encoding'][0].toLowerCase();
+      } else {
+        encoding = '7bit';
+      }
+      var onData, onEnd;
+      if (isPartAFile(fieldname, contype, filename)) {
+        // file/binary field
+        if (nfiles === filesLimit) {
+          if (!boy.hitFilesLimit) {
+            boy.hitFilesLimit = true;
+            boy.emit('filesLimit');
+          }
+          return skipPart(part);
+        }
+        ++nfiles;
+        if (!boy._events.file) {
+          self.parser._ignore();
+          return;
+        }
+        ++nends;
+        var file = new FileStream(fileOpts);
+        curFile = file;
+        file.on('end', function () {
+          --nends;
+          self._pause = false;
+          checkFinished();
+          if (self._cb && !self._needDrain) {
+            var cb = self._cb;
+            self._cb = undefined;
+            cb();
+          }
+        });
+        file._read = function (n) {
+          if (!self._pause) {
+            return;
+          }
+          self._pause = false;
+          if (self._cb && !self._needDrain) {
+            var cb = self._cb;
+            self._cb = undefined;
+            cb();
+          }
+        };
+        boy.emit('file', fieldname, file, filename, encoding, contype);
+        onData = function onData(data) {
+          if ((nsize += data.length) > fileSizeLimit) {
+            var extralen = fileSizeLimit - nsize + data.length;
+            if (extralen > 0) {
+              file.push(data.slice(0, extralen));
+            }
+            file.truncated = true;
+            file.bytesRead = fileSizeLimit;
+            part.removeAllListeners('data');
+            file.emit('limit');
+            return;
+          } else if (!file.push(data)) {
+            self._pause = true;
+          }
+          file.bytesRead = nsize;
+        };
+        onEnd = function onEnd() {
+          curFile = undefined;
+          file.push(null);
+        };
+      } else {
+        // non-file field
+        if (nfields === fieldsLimit) {
+          if (!boy.hitFieldsLimit) {
+            boy.hitFieldsLimit = true;
+            boy.emit('fieldsLimit');
+          }
+          return skipPart(part);
+        }
+        ++nfields;
+        ++nends;
+        var buffer = '';
+        var truncated = false;
+        curField = part;
+        onData = function onData(data) {
+          if ((nsize += data.length) > fieldSizeLimit) {
+            var extralen = fieldSizeLimit - (nsize - data.length);
+            buffer += data.toString('binary', 0, extralen);
+            truncated = true;
+            part.removeAllListeners('data');
+          } else {
+            buffer += data.toString('binary');
+          }
+        };
+        onEnd = function onEnd() {
+          curField = undefined;
+          if (buffer.length) {
+            buffer = decodeText(buffer, 'binary', charset);
+          }
+          boy.emit('field', fieldname, buffer, false, truncated, encoding, contype);
+          --nends;
+          checkFinished();
+        };
+      }
+
+      /* As of node@2efe4ab761666 (v0.10.29+/v0.11.14+), busboy had become
+         broken. Streams2/streams3 is a huge black box of confusion, but
+         somehow overriding the sync state seems to fix things again (and still
+         seems to work for previous node versions).
+      */
+      part._readableState.sync = false;
+      part.on('data', onData);
+      part.on('end', onEnd);
+    }).on('error', function (err) {
+      if (curFile) {
+        curFile.emit('error', err);
+      }
+    });
+  }).on('error', function (err) {
+    boy.emit('error', err);
+  }).on('finish', function () {
+    finished = true;
+    checkFinished();
+  });
+}
+Multipart.prototype.write = function (chunk, cb) {
+  var r = this.parser.write(chunk);
+  if (r && !this._pause) {
+    cb();
+  } else {
+    this._needDrain = !r;
+    this._cb = cb;
+  }
+};
+Multipart.prototype.end = function () {
+  var self = this;
+  if (self.parser.writable) {
+    self.parser.end();
+  } else if (!self._boy._done) {
+    process.nextTick(function () {
+      self._boy._done = true;
+      self._boy.emit('finish');
+    });
+  }
+};
+function skipPart(part) {
+  part.resume();
+}
+function FileStream(opts) {
+  Readable.call(this, opts);
+  this.bytesRead = 0;
+  this.truncated = false;
+}
+inherits(FileStream, Readable);
+FileStream.prototype._read = function (n) {};
+module.exports = Multipart;
+
+/***/ }),
+
+/***/ 4763:
+/***/ ((module, __unused_webpack_exports, __webpack_require__) => {
+
+"use strict";
+
+
+var Decoder = __webpack_require__(9879);
+var decodeText = __webpack_require__(8362);
+var getLimit = __webpack_require__(3524);
+var RE_CHARSET = /^charset$/i;
+UrlEncoded.detect = /^application\/x-www-form-urlencoded/i;
+function UrlEncoded(boy, cfg) {
+  var limits = cfg.limits;
+  var parsedConType = cfg.parsedConType;
+  this.boy = boy;
+  this.fieldSizeLimit = getLimit(limits, 'fieldSize', 1 * 1024 * 1024);
+  this.fieldNameSizeLimit = getLimit(limits, 'fieldNameSize', 100);
+  this.fieldsLimit = getLimit(limits, 'fields', Infinity);
+  var charset;
+  for (var i = 0, len = parsedConType.length; i < len; ++i) {
+    // eslint-disable-line no-var
+    if (Array.isArray(parsedConType[i]) && RE_CHARSET.test(parsedConType[i][0])) {
+      charset = parsedConType[i][1].toLowerCase();
+      break;
+    }
+  }
+  if (charset === undefined) {
+    charset = cfg.defCharset || 'utf8';
+  }
+  this.decoder = new Decoder();
+  this.charset = charset;
+  this._fields = 0;
+  this._state = 'key';
+  this._checkingBytes = true;
+  this._bytesKey = 0;
+  this._bytesVal = 0;
+  this._key = '';
+  this._val = '';
+  this._keyTrunc = false;
+  this._valTrunc = false;
+  this._hitLimit = false;
+}
+UrlEncoded.prototype.write = function (data, cb) {
+  if (this._fields === this.fieldsLimit) {
+    if (!this.boy.hitFieldsLimit) {
+      this.boy.hitFieldsLimit = true;
+      this.boy.emit('fieldsLimit');
+    }
+    return cb();
+  }
+  var idxeq;
+  var idxamp;
+  var i;
+  var p = 0;
+  var len = data.length;
+  while (p < len) {
+    if (this._state === 'key') {
+      idxeq = idxamp = undefined;
+      for (i = p; i < len; ++i) {
+        if (!this._checkingBytes) {
+          ++p;
+        }
+        if (data[i] === 0x3D /* = */) {
+          idxeq = i;
+          break;
+        } else if (data[i] === 0x26 /* & */) {
+          idxamp = i;
+          break;
+        }
+        if (this._checkingBytes && this._bytesKey === this.fieldNameSizeLimit) {
+          this._hitLimit = true;
+          break;
+        } else if (this._checkingBytes) {
+          ++this._bytesKey;
+        }
+      }
+      if (idxeq !== undefined) {
+        // key with assignment
+        if (idxeq > p) {
+          this._key += this.decoder.write(data.toString('binary', p, idxeq));
+        }
+        this._state = 'val';
+        this._hitLimit = false;
+        this._checkingBytes = true;
+        this._val = '';
+        this._bytesVal = 0;
+        this._valTrunc = false;
+        this.decoder.reset();
+        p = idxeq + 1;
+      } else if (idxamp !== undefined) {
+        // key with no assignment
+        ++this._fields;
+        var key = void 0;
+        var keyTrunc = this._keyTrunc;
+        if (idxamp > p) {
+          key = this._key += this.decoder.write(data.toString('binary', p, idxamp));
+        } else {
+          key = this._key;
+        }
+        this._hitLimit = false;
+        this._checkingBytes = true;
+        this._key = '';
+        this._bytesKey = 0;
+        this._keyTrunc = false;
+        this.decoder.reset();
+        if (key.length) {
+          this.boy.emit('field', decodeText(key, 'binary', this.charset), '', keyTrunc, false);
+        }
+        p = idxamp + 1;
+        if (this._fields === this.fieldsLimit) {
+          return cb();
+        }
+      } else if (this._hitLimit) {
+        // we may not have hit the actual limit if there are encoded bytes...
+        if (i > p) {
+          this._key += this.decoder.write(data.toString('binary', p, i));
+        }
+        p = i;
+        if ((this._bytesKey = this._key.length) === this.fieldNameSizeLimit) {
+          // yep, we actually did hit the limit
+          this._checkingBytes = false;
+          this._keyTrunc = true;
+        }
+      } else {
+        if (p < len) {
+          this._key += this.decoder.write(data.toString('binary', p));
+        }
+        p = len;
+      }
+    } else {
+      idxamp = undefined;
+      for (i = p; i < len; ++i) {
+        if (!this._checkingBytes) {
+          ++p;
+        }
+        if (data[i] === 0x26 /* & */) {
+          idxamp = i;
+          break;
+        }
+        if (this._checkingBytes && this._bytesVal === this.fieldSizeLimit) {
+          this._hitLimit = true;
+          break;
+        } else if (this._checkingBytes) {
+          ++this._bytesVal;
+        }
+      }
+      if (idxamp !== undefined) {
+        ++this._fields;
+        if (idxamp > p) {
+          this._val += this.decoder.write(data.toString('binary', p, idxamp));
+        }
+        this.boy.emit('field', decodeText(this._key, 'binary', this.charset), decodeText(this._val, 'binary', this.charset), this._keyTrunc, this._valTrunc);
+        this._state = 'key';
+        this._hitLimit = false;
+        this._checkingBytes = true;
+        this._key = '';
+        this._bytesKey = 0;
+        this._keyTrunc = false;
+        this.decoder.reset();
+        p = idxamp + 1;
+        if (this._fields === this.fieldsLimit) {
+          return cb();
+        }
+      } else if (this._hitLimit) {
+        // we may not have hit the actual limit if there are encoded bytes...
+        if (i > p) {
+          this._val += this.decoder.write(data.toString('binary', p, i));
+        }
+        p = i;
+        if (this._val === '' && this.fieldSizeLimit === 0 || (this._bytesVal = this._val.length) === this.fieldSizeLimit) {
+          // yep, we actually did hit the limit
+          this._checkingBytes = false;
+          this._valTrunc = true;
+        }
+      } else {
+        if (p < len) {
+          this._val += this.decoder.write(data.toString('binary', p));
+        }
+        p = len;
+      }
+    }
+  }
+  cb();
+};
+UrlEncoded.prototype.end = function () {
+  if (this.boy._done) {
+    return;
+  }
+  if (this._state === 'key' && this._key.length > 0) {
+    this.boy.emit('field', decodeText(this._key, 'binary', this.charset), '', this._keyTrunc, false);
+  } else if (this._state === 'val') {
+    this.boy.emit('field', decodeText(this._key, 'binary', this.charset), decodeText(this._val, 'binary', this.charset), this._keyTrunc, this._valTrunc);
+  }
+  this.boy._done = true;
+  this.boy.emit('finish');
+};
+module.exports = UrlEncoded;
+
+/***/ }),
+
+/***/ 9879:
+/***/ ((module) => {
+
+"use strict";
+
+
+var RE_PLUS = /\+/g;
+var HEX = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+function Decoder() {
+  this.buffer = undefined;
+}
+Decoder.prototype.write = function (str) {
+  // Replace '+' with ' ' before decoding
+  str = str.replace(RE_PLUS, ' ');
+  var res = '';
+  var i = 0;
+  var p = 0;
+  var len = str.length;
+  for (; i < len; ++i) {
+    if (this.buffer !== undefined) {
+      if (!HEX[str.charCodeAt(i)]) {
+        res += '%' + this.buffer;
+        this.buffer = undefined;
+        --i; // retry character
+      } else {
+        this.buffer += str[i];
+        ++p;
+        if (this.buffer.length === 2) {
+          res += String.fromCharCode(parseInt(this.buffer, 16));
+          this.buffer = undefined;
+        }
+      }
+    } else if (str[i] === '%') {
+      if (i > p) {
+        res += str.substring(p, i);
+        p = i;
+      }
+      this.buffer = '';
+      ++p;
+    }
+  }
+  if (p < len && this.buffer === undefined) {
+    res += str.substring(p);
+  }
+  return res;
+};
+Decoder.prototype.reset = function () {
+  this.buffer = undefined;
+};
+module.exports = Decoder;
+
+/***/ }),
+
+/***/ 5822:
+/***/ ((module) => {
+
+"use strict";
+
+
+module.exports = function basename(path) {
+  if (typeof path !== 'string') {
+    return '';
+  }
+  for (var i = path.length - 1; i >= 0; --i) {
+    // eslint-disable-line no-var
+    switch (path.charCodeAt(i)) {
+      case 0x2F: // '/'
+      case 0x5C:
+        // '\'
+        path = path.slice(i + 1);
+        return path === '..' || path === '.' ? '' : path;
+    }
+  }
+  return path === '..' || path === '.' ? '' : path;
+};
+
+/***/ }),
+
+/***/ 8362:
+/***/ (function(module) {
+
+"use strict";
+
+
+// Node has always utf-8
+var _this = this;
+var utf8Decoder = new TextDecoder('utf-8');
+var textDecoders = new Map([['utf-8', utf8Decoder], ['utf8', utf8Decoder]]);
+function getDecoder(charset) {
+  var lc;
+  while (true) {
+    switch (charset) {
+      case 'utf-8':
+      case 'utf8':
+        return decoders.utf8;
+      case 'latin1':
+      case 'ascii': // TODO: Make these a separate, strict decoder?
+      case 'us-ascii':
+      case 'iso-8859-1':
+      case 'iso8859-1':
+      case 'iso88591':
+      case 'iso_8859-1':
+      case 'windows-1252':
+      case 'iso_8859-1:1987':
+      case 'cp1252':
+      case 'x-cp1252':
+        return decoders.latin1;
+      case 'utf16le':
+      case 'utf-16le':
+      case 'ucs2':
+      case 'ucs-2':
+        return decoders.utf16le;
+      case 'base64':
+        return decoders.base64;
+      default:
+        if (lc === undefined) {
+          lc = true;
+          charset = charset.toLowerCase();
+          continue;
+        }
+        return decoders.other.bind(charset);
+    }
+  }
+}
+var decoders = {
+  utf8: function utf8(data, sourceEncoding) {
+    if (data.length === 0) {
+      return '';
+    }
+    if (typeof data === 'string') {
+      data = Buffer.from(data, sourceEncoding);
+    }
+    return data.utf8Slice(0, data.length);
+  },
+  latin1: function latin1(data, sourceEncoding) {
+    if (data.length === 0) {
+      return '';
+    }
+    if (typeof data === 'string') {
+      return data;
+    }
+    return data.latin1Slice(0, data.length);
+  },
+  utf16le: function utf16le(data, sourceEncoding) {
+    if (data.length === 0) {
+      return '';
+    }
+    if (typeof data === 'string') {
+      data = Buffer.from(data, sourceEncoding);
+    }
+    return data.ucs2Slice(0, data.length);
+  },
+  base64: function base64(data, sourceEncoding) {
+    if (data.length === 0) {
+      return '';
+    }
+    if (typeof data === 'string') {
+      data = Buffer.from(data, sourceEncoding);
+    }
+    return data.base64Slice(0, data.length);
+  },
+  other: function other(data, sourceEncoding) {
+    if (data.length === 0) {
+      return '';
+    }
+    if (typeof data === 'string') {
+      data = Buffer.from(data, sourceEncoding);
+    }
+    if (textDecoders.has(_this.toString())) {
+      try {
+        return textDecoders.get(_this).decode(data);
+      } catch (e) {}
+    }
+    return typeof data === 'string' ? data : data.toString();
+  }
+};
+function decodeText(text, sourceEncoding, destEncoding) {
+  if (text) {
+    return getDecoder(destEncoding)(text, sourceEncoding);
+  }
+  return text;
+}
+module.exports = decodeText;
+
+/***/ }),
+
+/***/ 3524:
+/***/ ((module) => {
+
+"use strict";
+
+
+module.exports = function getLimit(limits, name, defaultLimit) {
+  if (!limits || limits[name] === undefined || limits[name] === null) {
+    return defaultLimit;
+  }
+  if (typeof limits[name] !== 'number' || isNaN(limits[name])) {
+    throw new TypeError('Limit ' + name + ' is not a valid number');
+  }
+  return limits[name];
+};
+
+/***/ }),
+
+/***/ 529:
+/***/ ((module, __unused_webpack_exports, __webpack_require__) => {
+
+"use strict";
+/* eslint-disable object-property-newline */
+
+
+var decodeText = __webpack_require__(8362);
+var RE_ENCODED = /%[a-fA-F0-9][a-fA-F0-9]/g;
+var EncodedLookup = {
+  '%00': '\x00',
+  '%01': '\x01',
+  '%02': '\x02',
+  '%03': '\x03',
+  '%04': '\x04',
+  '%05': '\x05',
+  '%06': '\x06',
+  '%07': '\x07',
+  '%08': '\x08',
+  '%09': '\x09',
+  '%0a': '\x0a',
+  '%0A': '\x0a',
+  '%0b': '\x0b',
+  '%0B': '\x0b',
+  '%0c': '\x0c',
+  '%0C': '\x0c',
+  '%0d': '\x0d',
+  '%0D': '\x0d',
+  '%0e': '\x0e',
+  '%0E': '\x0e',
+  '%0f': '\x0f',
+  '%0F': '\x0f',
+  '%10': '\x10',
+  '%11': '\x11',
+  '%12': '\x12',
+  '%13': '\x13',
+  '%14': '\x14',
+  '%15': '\x15',
+  '%16': '\x16',
+  '%17': '\x17',
+  '%18': '\x18',
+  '%19': '\x19',
+  '%1a': '\x1a',
+  '%1A': '\x1a',
+  '%1b': '\x1b',
+  '%1B': '\x1b',
+  '%1c': '\x1c',
+  '%1C': '\x1c',
+  '%1d': '\x1d',
+  '%1D': '\x1d',
+  '%1e': '\x1e',
+  '%1E': '\x1e',
+  '%1f': '\x1f',
+  '%1F': '\x1f',
+  '%20': '\x20',
+  '%21': '\x21',
+  '%22': '\x22',
+  '%23': '\x23',
+  '%24': '\x24',
+  '%25': '\x25',
+  '%26': '\x26',
+  '%27': '\x27',
+  '%28': '\x28',
+  '%29': '\x29',
+  '%2a': '\x2a',
+  '%2A': '\x2a',
+  '%2b': '\x2b',
+  '%2B': '\x2b',
+  '%2c': '\x2c',
+  '%2C': '\x2c',
+  '%2d': '\x2d',
+  '%2D': '\x2d',
+  '%2e': '\x2e',
+  '%2E': '\x2e',
+  '%2f': '\x2f',
+  '%2F': '\x2f',
+  '%30': '\x30',
+  '%31': '\x31',
+  '%32': '\x32',
+  '%33': '\x33',
+  '%34': '\x34',
+  '%35': '\x35',
+  '%36': '\x36',
+  '%37': '\x37',
+  '%38': '\x38',
+  '%39': '\x39',
+  '%3a': '\x3a',
+  '%3A': '\x3a',
+  '%3b': '\x3b',
+  '%3B': '\x3b',
+  '%3c': '\x3c',
+  '%3C': '\x3c',
+  '%3d': '\x3d',
+  '%3D': '\x3d',
+  '%3e': '\x3e',
+  '%3E': '\x3e',
+  '%3f': '\x3f',
+  '%3F': '\x3f',
+  '%40': '\x40',
+  '%41': '\x41',
+  '%42': '\x42',
+  '%43': '\x43',
+  '%44': '\x44',
+  '%45': '\x45',
+  '%46': '\x46',
+  '%47': '\x47',
+  '%48': '\x48',
+  '%49': '\x49',
+  '%4a': '\x4a',
+  '%4A': '\x4a',
+  '%4b': '\x4b',
+  '%4B': '\x4b',
+  '%4c': '\x4c',
+  '%4C': '\x4c',
+  '%4d': '\x4d',
+  '%4D': '\x4d',
+  '%4e': '\x4e',
+  '%4E': '\x4e',
+  '%4f': '\x4f',
+  '%4F': '\x4f',
+  '%50': '\x50',
+  '%51': '\x51',
+  '%52': '\x52',
+  '%53': '\x53',
+  '%54': '\x54',
+  '%55': '\x55',
+  '%56': '\x56',
+  '%57': '\x57',
+  '%58': '\x58',
+  '%59': '\x59',
+  '%5a': '\x5a',
+  '%5A': '\x5a',
+  '%5b': '\x5b',
+  '%5B': '\x5b',
+  '%5c': '\x5c',
+  '%5C': '\x5c',
+  '%5d': '\x5d',
+  '%5D': '\x5d',
+  '%5e': '\x5e',
+  '%5E': '\x5e',
+  '%5f': '\x5f',
+  '%5F': '\x5f',
+  '%60': '\x60',
+  '%61': '\x61',
+  '%62': '\x62',
+  '%63': '\x63',
+  '%64': '\x64',
+  '%65': '\x65',
+  '%66': '\x66',
+  '%67': '\x67',
+  '%68': '\x68',
+  '%69': '\x69',
+  '%6a': '\x6a',
+  '%6A': '\x6a',
+  '%6b': '\x6b',
+  '%6B': '\x6b',
+  '%6c': '\x6c',
+  '%6C': '\x6c',
+  '%6d': '\x6d',
+  '%6D': '\x6d',
+  '%6e': '\x6e',
+  '%6E': '\x6e',
+  '%6f': '\x6f',
+  '%6F': '\x6f',
+  '%70': '\x70',
+  '%71': '\x71',
+  '%72': '\x72',
+  '%73': '\x73',
+  '%74': '\x74',
+  '%75': '\x75',
+  '%76': '\x76',
+  '%77': '\x77',
+  '%78': '\x78',
+  '%79': '\x79',
+  '%7a': '\x7a',
+  '%7A': '\x7a',
+  '%7b': '\x7b',
+  '%7B': '\x7b',
+  '%7c': '\x7c',
+  '%7C': '\x7c',
+  '%7d': '\x7d',
+  '%7D': '\x7d',
+  '%7e': '\x7e',
+  '%7E': '\x7e',
+  '%7f': '\x7f',
+  '%7F': '\x7f',
+  '%80': '\x80',
+  '%81': '\x81',
+  '%82': '\x82',
+  '%83': '\x83',
+  '%84': '\x84',
+  '%85': '\x85',
+  '%86': '\x86',
+  '%87': '\x87',
+  '%88': '\x88',
+  '%89': '\x89',
+  '%8a': '\x8a',
+  '%8A': '\x8a',
+  '%8b': '\x8b',
+  '%8B': '\x8b',
+  '%8c': '\x8c',
+  '%8C': '\x8c',
+  '%8d': '\x8d',
+  '%8D': '\x8d',
+  '%8e': '\x8e',
+  '%8E': '\x8e',
+  '%8f': '\x8f',
+  '%8F': '\x8f',
+  '%90': '\x90',
+  '%91': '\x91',
+  '%92': '\x92',
+  '%93': '\x93',
+  '%94': '\x94',
+  '%95': '\x95',
+  '%96': '\x96',
+  '%97': '\x97',
+  '%98': '\x98',
+  '%99': '\x99',
+  '%9a': '\x9a',
+  '%9A': '\x9a',
+  '%9b': '\x9b',
+  '%9B': '\x9b',
+  '%9c': '\x9c',
+  '%9C': '\x9c',
+  '%9d': '\x9d',
+  '%9D': '\x9d',
+  '%9e': '\x9e',
+  '%9E': '\x9e',
+  '%9f': '\x9f',
+  '%9F': '\x9f',
+  '%a0': '\xa0',
+  '%A0': '\xa0',
+  '%a1': '\xa1',
+  '%A1': '\xa1',
+  '%a2': '\xa2',
+  '%A2': '\xa2',
+  '%a3': '\xa3',
+  '%A3': '\xa3',
+  '%a4': '\xa4',
+  '%A4': '\xa4',
+  '%a5': '\xa5',
+  '%A5': '\xa5',
+  '%a6': '\xa6',
+  '%A6': '\xa6',
+  '%a7': '\xa7',
+  '%A7': '\xa7',
+  '%a8': '\xa8',
+  '%A8': '\xa8',
+  '%a9': '\xa9',
+  '%A9': '\xa9',
+  '%aa': '\xaa',
+  '%Aa': '\xaa',
+  '%aA': '\xaa',
+  '%AA': '\xaa',
+  '%ab': '\xab',
+  '%Ab': '\xab',
+  '%aB': '\xab',
+  '%AB': '\xab',
+  '%ac': '\xac',
+  '%Ac': '\xac',
+  '%aC': '\xac',
+  '%AC': '\xac',
+  '%ad': '\xad',
+  '%Ad': '\xad',
+  '%aD': '\xad',
+  '%AD': '\xad',
+  '%ae': '\xae',
+  '%Ae': '\xae',
+  '%aE': '\xae',
+  '%AE': '\xae',
+  '%af': '\xaf',
+  '%Af': '\xaf',
+  '%aF': '\xaf',
+  '%AF': '\xaf',
+  '%b0': '\xb0',
+  '%B0': '\xb0',
+  '%b1': '\xb1',
+  '%B1': '\xb1',
+  '%b2': '\xb2',
+  '%B2': '\xb2',
+  '%b3': '\xb3',
+  '%B3': '\xb3',
+  '%b4': '\xb4',
+  '%B4': '\xb4',
+  '%b5': '\xb5',
+  '%B5': '\xb5',
+  '%b6': '\xb6',
+  '%B6': '\xb6',
+  '%b7': '\xb7',
+  '%B7': '\xb7',
+  '%b8': '\xb8',
+  '%B8': '\xb8',
+  '%b9': '\xb9',
+  '%B9': '\xb9',
+  '%ba': '\xba',
+  '%Ba': '\xba',
+  '%bA': '\xba',
+  '%BA': '\xba',
+  '%bb': '\xbb',
+  '%Bb': '\xbb',
+  '%bB': '\xbb',
+  '%BB': '\xbb',
+  '%bc': '\xbc',
+  '%Bc': '\xbc',
+  '%bC': '\xbc',
+  '%BC': '\xbc',
+  '%bd': '\xbd',
+  '%Bd': '\xbd',
+  '%bD': '\xbd',
+  '%BD': '\xbd',
+  '%be': '\xbe',
+  '%Be': '\xbe',
+  '%bE': '\xbe',
+  '%BE': '\xbe',
+  '%bf': '\xbf',
+  '%Bf': '\xbf',
+  '%bF': '\xbf',
+  '%BF': '\xbf',
+  '%c0': '\xc0',
+  '%C0': '\xc0',
+  '%c1': '\xc1',
+  '%C1': '\xc1',
+  '%c2': '\xc2',
+  '%C2': '\xc2',
+  '%c3': '\xc3',
+  '%C3': '\xc3',
+  '%c4': '\xc4',
+  '%C4': '\xc4',
+  '%c5': '\xc5',
+  '%C5': '\xc5',
+  '%c6': '\xc6',
+  '%C6': '\xc6',
+  '%c7': '\xc7',
+  '%C7': '\xc7',
+  '%c8': '\xc8',
+  '%C8': '\xc8',
+  '%c9': '\xc9',
+  '%C9': '\xc9',
+  '%ca': '\xca',
+  '%Ca': '\xca',
+  '%cA': '\xca',
+  '%CA': '\xca',
+  '%cb': '\xcb',
+  '%Cb': '\xcb',
+  '%cB': '\xcb',
+  '%CB': '\xcb',
+  '%cc': '\xcc',
+  '%Cc': '\xcc',
+  '%cC': '\xcc',
+  '%CC': '\xcc',
+  '%cd': '\xcd',
+  '%Cd': '\xcd',
+  '%cD': '\xcd',
+  '%CD': '\xcd',
+  '%ce': '\xce',
+  '%Ce': '\xce',
+  '%cE': '\xce',
+  '%CE': '\xce',
+  '%cf': '\xcf',
+  '%Cf': '\xcf',
+  '%cF': '\xcf',
+  '%CF': '\xcf',
+  '%d0': '\xd0',
+  '%D0': '\xd0',
+  '%d1': '\xd1',
+  '%D1': '\xd1',
+  '%d2': '\xd2',
+  '%D2': '\xd2',
+  '%d3': '\xd3',
+  '%D3': '\xd3',
+  '%d4': '\xd4',
+  '%D4': '\xd4',
+  '%d5': '\xd5',
+  '%D5': '\xd5',
+  '%d6': '\xd6',
+  '%D6': '\xd6',
+  '%d7': '\xd7',
+  '%D7': '\xd7',
+  '%d8': '\xd8',
+  '%D8': '\xd8',
+  '%d9': '\xd9',
+  '%D9': '\xd9',
+  '%da': '\xda',
+  '%Da': '\xda',
+  '%dA': '\xda',
+  '%DA': '\xda',
+  '%db': '\xdb',
+  '%Db': '\xdb',
+  '%dB': '\xdb',
+  '%DB': '\xdb',
+  '%dc': '\xdc',
+  '%Dc': '\xdc',
+  '%dC': '\xdc',
+  '%DC': '\xdc',
+  '%dd': '\xdd',
+  '%Dd': '\xdd',
+  '%dD': '\xdd',
+  '%DD': '\xdd',
+  '%de': '\xde',
+  '%De': '\xde',
+  '%dE': '\xde',
+  '%DE': '\xde',
+  '%df': '\xdf',
+  '%Df': '\xdf',
+  '%dF': '\xdf',
+  '%DF': '\xdf',
+  '%e0': '\xe0',
+  '%E0': '\xe0',
+  '%e1': '\xe1',
+  '%E1': '\xe1',
+  '%e2': '\xe2',
+  '%E2': '\xe2',
+  '%e3': '\xe3',
+  '%E3': '\xe3',
+  '%e4': '\xe4',
+  '%E4': '\xe4',
+  '%e5': '\xe5',
+  '%E5': '\xe5',
+  '%e6': '\xe6',
+  '%E6': '\xe6',
+  '%e7': '\xe7',
+  '%E7': '\xe7',
+  '%e8': '\xe8',
+  '%E8': '\xe8',
+  '%e9': '\xe9',
+  '%E9': '\xe9',
+  '%ea': '\xea',
+  '%Ea': '\xea',
+  '%eA': '\xea',
+  '%EA': '\xea',
+  '%eb': '\xeb',
+  '%Eb': '\xeb',
+  '%eB': '\xeb',
+  '%EB': '\xeb',
+  '%ec': '\xec',
+  '%Ec': '\xec',
+  '%eC': '\xec',
+  '%EC': '\xec',
+  '%ed': '\xed',
+  '%Ed': '\xed',
+  '%eD': '\xed',
+  '%ED': '\xed',
+  '%ee': '\xee',
+  '%Ee': '\xee',
+  '%eE': '\xee',
+  '%EE': '\xee',
+  '%ef': '\xef',
+  '%Ef': '\xef',
+  '%eF': '\xef',
+  '%EF': '\xef',
+  '%f0': '\xf0',
+  '%F0': '\xf0',
+  '%f1': '\xf1',
+  '%F1': '\xf1',
+  '%f2': '\xf2',
+  '%F2': '\xf2',
+  '%f3': '\xf3',
+  '%F3': '\xf3',
+  '%f4': '\xf4',
+  '%F4': '\xf4',
+  '%f5': '\xf5',
+  '%F5': '\xf5',
+  '%f6': '\xf6',
+  '%F6': '\xf6',
+  '%f7': '\xf7',
+  '%F7': '\xf7',
+  '%f8': '\xf8',
+  '%F8': '\xf8',
+  '%f9': '\xf9',
+  '%F9': '\xf9',
+  '%fa': '\xfa',
+  '%Fa': '\xfa',
+  '%fA': '\xfa',
+  '%FA': '\xfa',
+  '%fb': '\xfb',
+  '%Fb': '\xfb',
+  '%fB': '\xfb',
+  '%FB': '\xfb',
+  '%fc': '\xfc',
+  '%Fc': '\xfc',
+  '%fC': '\xfc',
+  '%FC': '\xfc',
+  '%fd': '\xfd',
+  '%Fd': '\xfd',
+  '%fD': '\xfd',
+  '%FD': '\xfd',
+  '%fe': '\xfe',
+  '%Fe': '\xfe',
+  '%fE': '\xfe',
+  '%FE': '\xfe',
+  '%ff': '\xff',
+  '%Ff': '\xff',
+  '%fF': '\xff',
+  '%FF': '\xff'
+};
+function encodedReplacer(match) {
+  return EncodedLookup[match];
+}
+var STATE_KEY = 0;
+var STATE_VALUE = 1;
+var STATE_CHARSET = 2;
+var STATE_LANG = 3;
+function parseParams(str) {
+  var res = [];
+  var state = STATE_KEY;
+  var charset = '';
+  var inquote = false;
+  var escaping = false;
+  var p = 0;
+  var tmp = '';
+  var len = str.length;
+  for (var i = 0; i < len; ++i) {
+    // eslint-disable-line no-var
+    var _char = str[i];
+    if (_char === '\\' && inquote) {
+      if (escaping) {
+        escaping = false;
+      } else {
+        escaping = true;
+        continue;
+      }
+    } else if (_char === '"') {
+      if (!escaping) {
+        if (inquote) {
+          inquote = false;
+          state = STATE_KEY;
+        } else {
+          inquote = true;
+        }
+        continue;
+      } else {
+        escaping = false;
+      }
+    } else {
+      if (escaping && inquote) {
+        tmp += '\\';
+      }
+      escaping = false;
+      if ((state === STATE_CHARSET || state === STATE_LANG) && _char === "'") {
+        if (state === STATE_CHARSET) {
+          state = STATE_LANG;
+          charset = tmp.substring(1);
+        } else {
+          state = STATE_VALUE;
+        }
+        tmp = '';
+        continue;
+      } else if (state === STATE_KEY && (_char === '*' || _char === '=') && res.length) {
+        state = _char === '*' ? STATE_CHARSET : STATE_VALUE;
+        res[p] = [tmp, undefined];
+        tmp = '';
+        continue;
+      } else if (!inquote && _char === ';') {
+        state = STATE_KEY;
+        if (charset) {
+          if (tmp.length) {
+            tmp = decodeText(tmp.replace(RE_ENCODED, encodedReplacer), 'binary', charset);
+          }
+          charset = '';
+        } else if (tmp.length) {
+          tmp = decodeText(tmp, 'binary', 'utf8');
+        }
+        if (res[p] === undefined) {
+          res[p] = tmp;
+        } else {
+          res[p][1] = tmp;
+        }
+        tmp = '';
+        ++p;
+        continue;
+      } else if (!inquote && (_char === ' ' || _char === '\t')) {
+        continue;
+      }
+    }
+    tmp += _char;
+  }
+  if (charset && tmp.length) {
+    tmp = decodeText(tmp.replace(RE_ENCODED, encodedReplacer), 'binary', charset);
+  } else if (tmp) {
+    tmp = decodeText(tmp, 'binary', 'utf8');
+  }
+  if (res[p] === undefined) {
+    if (tmp) {
+      res[p] = tmp;
+    }
+  } else {
+    res[p][1] = tmp;
+  }
+  return res;
+}
+module.exports = parseParams;
 
 /***/ })
 
