@@ -197,7 +197,7 @@ jobs:
       #     token: ${{ secrets.NPM_TOKEN }}
       #     package: ./package.json
 
-      - run: npm publish
+      - run: npm publish --access public --provenance
         name: 📦 generated-badges publish to NPM
         continue-on-error: true
         env:
