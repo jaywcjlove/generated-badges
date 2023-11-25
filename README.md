@@ -1,6 +1,7 @@
 Generated Badges
 ===
 
+[![Buy me a coffee](https://img.shields.io/badge/Buy%20me%20a%20coffee-048754?logo=buymeacoffee)](https://jaywcjlove.github.io/#/sponsor)
 [![Build & Deploy](https://github.com/jaywcjlove/generated-badges/actions/workflows/ci.yml/badge.svg)](https://github.com/jaywcjlove/generated-badges/actions/workflows/ci.yml)
 [![npm version](https://img.shields.io/npm/v/generated-badges.svg)](https://www.npmjs.com/package/generated-badges)
 

@@ -4,6 +4,9 @@ on: [push]
 jobs:
   test:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      id-token: write
     steps:
       - uses: actions/checkout@v3
       - uses: actions/setup-node@v3
@@ -24,7 +27,9 @@ jobs:
           site: "Generated Badges {{version}}"
           menus:
             Home: index.html
+            Sponsor: https://jaywcjlove.github.io/#/sponsor
           footer: |
+            <a href="https://jaywcjlove.github.io/#/sponsor" target="_blank">Sponsor</a> • 
             <a href="https://jaywcjlove.github.io/changelog-generator" target="_blank">Changelog Generator</a> • 
             <a href="https://jaywcjlove.github.io/github-action-contributors" target="_blank">Contributors</a> • 
             <a href="https://jaywcjlove.github.io/github-action-read-file" target="_blank">Read File Content</a> • 
