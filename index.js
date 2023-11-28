@@ -7721,11 +7721,8 @@ var Parser = /*#__PURE__*/function () {
         // Stop more requests from being dispatched.
         socket[kReset] = true;
       }
-      var pause;
-      try {
-        pause = request.onHeaders(statusCode, headers, this.resume, statusText) === false;
-      } catch (err) {
-        util.destroy(socket, err);
+      var pause = request.onHeaders(statusCode, headers, this.resume, statusText) === false;
+      if (request.aborted) {
         return -1;
       }
       if (request.method === 'HEAD') {
@@ -7765,13 +7762,8 @@ var Parser = /*#__PURE__*/function () {
         return -1;
       }
       this.bytesRead += buf.length;
-      try {
-        if (request.onData(buf) === false) {
-          return constants.ERROR.PAUSED;
-        }
-      } catch (err) {
-        util.destroy(socket, err);
-        return -1;
+      if (request.onData(buf) === false) {
+        return constants.ERROR.PAUSED;
       }
     }
   }, {
@@ -7812,11 +7804,7 @@ var Parser = /*#__PURE__*/function () {
         util.destroy(socket, new ResponseContentLengthMismatchError());
         return -1;
       }
-      try {
-        request.onComplete(headers);
-      } catch (err) {
-        errorRequest(client, request, err);
-      }
+      request.onComplete(headers);
       client[kQueue][client[kRunningIdx]++] = null;
       if (socket[kWriting]) {
         assert.strictEqual(client[kRunning], 0);
@@ -8564,12 +8552,16 @@ function writeH2(client, session, request) {
     request.onComplete([]);
   });
   stream.on('data', function (chunk) {
-    if (request.onData(chunk) === false) stream.pause();
+    if (request.onData(chunk) === false) {
+      stream.pause();
+    }
   });
   stream.once('close', function () {
     h2State.openStreams -= 1;
     // TODO(HTTP/2): unref only if current streams count is 0
-    if (h2State.openStreams === 0) session.unref();
+    if (h2State.openStreams === 0) {
+      session.unref();
+    }
   });
   stream.once('error', function (err) {
     if (client[kHTTP2Session] && !client[kHTTP2Session].destroyed && !this.closed && !this.destroyed) {
@@ -10808,7 +10800,11 @@ var Request = /*#__PURE__*/function () {
     key: "onBodySent",
     value: function onBodySent(chunk) {
       if (this[kHandler].onBodySent) {
-        return this[kHandler].onBodySent(chunk);
+        try {
+          return this[kHandler].onBodySent(chunk);
+        } catch (err) {
+          this.abort(err);
+        }
       }
     }
   }, {
@@ -10820,7 +10816,11 @@ var Request = /*#__PURE__*/function () {
         });
       }
       if (this[kHandler].onRequestSent) {
-        return this[kHandler].onRequestSent();
+        try {
+          return this[kHandler].onRequestSent();
+        } catch (err) {
+          this.abort(err);
+        }
       }
     }
   }, {
@@ -10850,14 +10850,23 @@ var Request = /*#__PURE__*/function () {
           }
         });
       }
-      return this[kHandler].onHeaders(statusCode, headers, resume, statusText);
+      try {
+        return this[kHandler].onHeaders(statusCode, headers, resume, statusText);
+      } catch (err) {
+        this.abort(err);
+      }
     }
   }, {
     key: "onData",
     value: function onData(chunk) {
       assert(!this.aborted);
       assert(!this.completed);
-      return this[kHandler].onData(chunk);
+      try {
+        return this[kHandler].onData(chunk);
+      } catch (err) {
+        this.abort(err);
+        return false;
+      }
     }
   }, {
     key: "onUpgrade",
@@ -10878,7 +10887,12 @@ var Request = /*#__PURE__*/function () {
           trailers: trailers
         });
       }
-      return this[kHandler].onComplete(trailers);
+      try {
+        return this[kHandler].onComplete(trailers);
+      } catch (err) {
+        // TODO (fix): This might be a bad idea?
+        this.onError(err);
+      }
     }
   }, {
     key: "onError",
@@ -17257,7 +17271,8 @@ var _require4 = __webpack_require__(6030),
   isValidHTTPToken = _require4.isValidHTTPToken,
   sameOrigin = _require4.sameOrigin,
   normalizeMethod = _require4.normalizeMethod,
-  makePolicyContainer = _require4.makePolicyContainer;
+  makePolicyContainer = _require4.makePolicyContainer,
+  normalizeMethodRecord = _require4.normalizeMethodRecord;
 var _require5 = __webpack_require__(2654),
   forbiddenMethodsSet = _require5.forbiddenMethodsSet,
   corsSafeListedMethodsSet = _require5.corsSafeListedMethodsSet,
@@ -17441,9 +17456,10 @@ var Request = /*#__PURE__*/function () {
       // URL list A clone of request’s URL list.
       urlList: _toConsumableArray(request.urlList)
     });
+    var initHasKey = Object.keys(init).length !== 0;
 
     // 13. If init is not empty, then:
-    if (Object.keys(init).length > 0) {
+    if (initHasKey) {
       // 1. If request’s mode is "navigate", then set it to "same-origin".
       if (request.mode === 'navigate') {
         request.mode = 'same-origin';
@@ -17566,20 +17582,21 @@ var Request = /*#__PURE__*/function () {
 
     // 25. If init["method"] exists, then:
     if (init.method !== undefined) {
+      var _normalizeMethodRecor;
       // 1. Let method be init["method"].
       var method = init.method;
 
       // 2. If method is not a method or method is a forbidden method, then
       // throw a TypeError.
-      if (!isValidHTTPToken(init.method)) {
-        throw new TypeError("'".concat(init.method, "' is not a valid HTTP method."));
+      if (!isValidHTTPToken(method)) {
+        throw new TypeError("'".concat(method, "' is not a valid HTTP method."));
       }
       if (forbiddenMethodsSet.has(method.toUpperCase())) {
-        throw new TypeError("'".concat(init.method, "' HTTP method is unsupported."));
+        throw new TypeError("'".concat(method, "' HTTP method is unsupported."));
       }
 
       // 3. Normalize method.
-      method = normalizeMethod(init.method);
+      method = (_normalizeMethodRecor = normalizeMethodRecord[method]) !== null && _normalizeMethodRecor !== void 0 ? _normalizeMethodRecor : normalizeMethod(method);
 
       // 4. Set request’s method to method.
       request.method = method;
@@ -17662,22 +17679,20 @@ var Request = /*#__PURE__*/function () {
     }
 
     // 32. If init is not empty, then:
-    if (Object.keys(init).length !== 0) {
+    if (initHasKey) {
+      /** @type {HeadersList} */
+      var headersList = this[kHeaders][kHeadersList];
       // 1. Let headers be a copy of this’s headers and its associated header
       // list.
-      var headers = new Headers(this[kHeaders]);
-
       // 2. If init["headers"] exists, then set headers to init["headers"].
-      if (init.headers !== undefined) {
-        headers = init.headers;
-      }
+      var headers = init.headers !== undefined ? init.headers : new HeadersList(headersList);
 
       // 3. Empty this’s headers’s header list.
-      this[kHeaders][kHeadersList].clear();
+      headersList.clear();
 
       // 4. If headers is a Headers object, then for each header in its header
       // list, append header’s name/header’s value to this’s headers.
-      if (headers.constructor.name === 'Headers') {
+      if (headers instanceof HeadersList) {
         var _iterator = _createForOfIteratorHelper(headers),
           _step;
         try {
@@ -17685,13 +17700,15 @@ var Request = /*#__PURE__*/function () {
             var _step$value = _slicedToArray(_step.value, 2),
               key = _step$value[0],
               val = _step$value[1];
-            this[kHeaders].append(key, val);
+            headersList.append(key, val);
           }
+          // Note: Copy the `set-cookie` meta-data.
         } catch (err) {
           _iterator.e(err);
         } finally {
           _iterator.f();
         }
+        headersList.cookies = headers.cookies;
       } else {
         // 5. Otherwise, fill this’s headers with headers.
         fillHeaders(this[kHeaders], headers);
@@ -19538,10 +19555,31 @@ function isAborted(fetchParams) {
 function isCancelled(fetchParams) {
   return fetchParams.controller.state === 'aborted' || fetchParams.controller.state === 'terminated';
 }
+var normalizeMethodRecord = {
+  "delete": 'DELETE',
+  DELETE: 'DELETE',
+  get: 'GET',
+  GET: 'GET',
+  head: 'HEAD',
+  HEAD: 'HEAD',
+  options: 'OPTIONS',
+  OPTIONS: 'OPTIONS',
+  post: 'POST',
+  POST: 'POST',
+  put: 'PUT',
+  PUT: 'PUT'
+};
 
-// https://fetch.spec.whatwg.org/#concept-method-normalize
+// Note: object prototypes should not be able to be referenced. e.g. `Object#hasOwnProperty`.
+Object.setPrototypeOf(normalizeMethodRecord, null);
+
+/**
+ * @see https://fetch.spec.whatwg.org/#concept-method-normalize
+ * @param {string} method
+ */
 function normalizeMethod(method) {
-  return /^(DELETE|GET|HEAD|OPTIONS|POST|PUT)$/i.test(method) ? method.toUpperCase() : method;
+  var _normalizeMethodRecor;
+  return (_normalizeMethodRecor = normalizeMethodRecord[method.toLowerCase()]) !== null && _normalizeMethodRecor !== void 0 ? _normalizeMethodRecor : method;
 }
 
 // https://infra.spec.whatwg.org/#serialize-a-javascript-value-to-a-json-string
@@ -19919,7 +19957,8 @@ module.exports = {
   urlIsLocal: urlIsLocal,
   urlHasHttpsScheme: urlHasHttpsScheme,
   urlIsHttpHttpsScheme: urlIsHttpHttpsScheme,
-  readAllBytes: readAllBytes
+  readAllBytes: readAllBytes,
+  normalizeMethodRecord: normalizeMethodRecord
 };
 
 /***/ }),
