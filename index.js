@@ -1492,9 +1492,9 @@ var _createForOfIteratorHelper = (__webpack_require__(4704)["default"]);
 var _regeneratorRuntime = (__webpack_require__(7061)["default"]);
 var _createClass = (__webpack_require__(9728)["default"]);
 var _classCallCheck = (__webpack_require__(6690)["default"]);
+var _callSuper = (__webpack_require__(6976)["default"]);
 var _assertThisInitialized = (__webpack_require__(6115)["default"]);
 var _inherits = (__webpack_require__(1655)["default"]);
-var _createSuper = (__webpack_require__(6389)["default"]);
 var _wrapNativeSuper = (__webpack_require__(3496)["default"]);
 var __createBinding = this && this.__createBinding || (Object.create ? function (o, m, k, k2) {
   if (k2 === undefined) k2 = k;
@@ -1618,11 +1618,10 @@ var ExponentialBackoffCeiling = 10;
 var ExponentialBackoffTimeSlice = 5;
 var HttpClientError = /*#__PURE__*/function (_Error) {
   _inherits(HttpClientError, _Error);
-  var _super = _createSuper(HttpClientError);
   function HttpClientError(message, statusCode) {
     var _this;
     _classCallCheck(this, HttpClientError);
-    _this = _super.call(this, message);
+    _this = _callSuper(this, HttpClientError, [message]);
     _this.name = 'HttpClientError';
     _this.statusCode = statusCode;
     Object.setPrototypeOf(_assertThisInitialized(_this), HttpClientError.prototype);
@@ -2979,7 +2978,6 @@ function toOptions(host, port, localAddress) {
   }
   return host; // for v0.11 or later
 }
-
 function mergeOptions(target) {
   for (var i = 1, len = arguments.length; i < len; ++i) {
     var overrides = arguments[i];
@@ -3208,9 +3206,9 @@ var _objectSpread = (__webpack_require__(2122)["default"]);
 var _objectWithoutProperties = (__webpack_require__(215)["default"]);
 var _classCallCheck = (__webpack_require__(6690)["default"]);
 var _createClass = (__webpack_require__(9728)["default"]);
+var _callSuper = (__webpack_require__(6976)["default"]);
 var _assertThisInitialized = (__webpack_require__(6115)["default"]);
 var _inherits = (__webpack_require__(1655)["default"]);
-var _createSuper = (__webpack_require__(6389)["default"]);
 var _excluded = ["factory", "maxRedirections", "connect"];
 var _require = __webpack_require__(7105),
   InvalidArgumentError = _require.InvalidArgumentError;
@@ -3242,7 +3240,6 @@ function defaultFactory(origin, opts) {
 }
 var Agent = /*#__PURE__*/function (_DispatcherBase) {
   _inherits(Agent, _DispatcherBase);
-  var _super = _createSuper(Agent);
   function Agent() {
     var _this;
     var _ref = arguments.length > 0 && arguments[0] !== undefined ? arguments[0] : {},
@@ -3253,7 +3250,7 @@ var Agent = /*#__PURE__*/function (_DispatcherBase) {
       connect = _ref.connect,
       options = _objectWithoutProperties(_ref, _excluded);
     _classCallCheck(this, Agent);
-    _this = _super.call(this);
+    _this = _callSuper(this, Agent);
     if (typeof factory !== 'function') {
       throw new InvalidArgumentError('factory must be a function.');
     }
@@ -3478,9 +3475,9 @@ module.exports = {
 var _objectSpread = (__webpack_require__(2122)["default"]);
 var _classCallCheck = (__webpack_require__(6690)["default"]);
 var _createClass = (__webpack_require__(9728)["default"]);
+var _callSuper = (__webpack_require__(6976)["default"]);
 var _assertThisInitialized = (__webpack_require__(6115)["default"]);
 var _inherits = (__webpack_require__(1655)["default"]);
-var _createSuper = (__webpack_require__(6389)["default"]);
 var _require = __webpack_require__(852),
   AsyncResource = _require.AsyncResource;
 var _require2 = __webpack_require__(7105),
@@ -3493,7 +3490,6 @@ var _require3 = __webpack_require__(3128),
   removeSignal = _require3.removeSignal;
 var ConnectHandler = /*#__PURE__*/function (_AsyncResource) {
   _inherits(ConnectHandler, _AsyncResource);
-  var _super = _createSuper(ConnectHandler);
   function ConnectHandler(opts, callback) {
     var _this;
     _classCallCheck(this, ConnectHandler);
@@ -3509,7 +3505,7 @@ var ConnectHandler = /*#__PURE__*/function (_AsyncResource) {
     if (signal && typeof signal.on !== 'function' && typeof signal.addEventListener !== 'function') {
       throw new InvalidArgumentError('signal must be an EventEmitter or EventTarget');
     }
-    _this = _super.call(this, 'UNDICI_CONNECT');
+    _this = _callSuper(this, ConnectHandler, ['UNDICI_CONNECT']);
     _this.opaque = opaque || null;
     _this.responseHeaders = responseHeaders || null;
     _this.callback = callback;
@@ -3611,8 +3607,8 @@ var _objectSpread = (__webpack_require__(2122)["default"]);
 var _assertThisInitialized = (__webpack_require__(6115)["default"]);
 var _classCallCheck = (__webpack_require__(6690)["default"]);
 var _createClass = (__webpack_require__(9728)["default"]);
+var _callSuper = (__webpack_require__(6976)["default"]);
 var _inherits = (__webpack_require__(1655)["default"]);
-var _createSuper = (__webpack_require__(6389)["default"]);
 var _require = __webpack_require__(2781),
   Readable = _require.Readable,
   Duplex = _require.Duplex,
@@ -3631,13 +3627,12 @@ var assert = __webpack_require__(9491);
 var kResume = Symbol('resume');
 var PipelineRequest = /*#__PURE__*/function (_Readable) {
   _inherits(PipelineRequest, _Readable);
-  var _super = _createSuper(PipelineRequest);
   function PipelineRequest() {
     var _this;
     _classCallCheck(this, PipelineRequest);
-    _this = _super.call(this, {
+    _this = _callSuper(this, PipelineRequest, [{
       autoDestroy: true
-    });
+    }]);
     _this[kResume] = null;
     return _this;
   }
@@ -3661,13 +3656,12 @@ var PipelineRequest = /*#__PURE__*/function (_Readable) {
 }(Readable);
 var PipelineResponse = /*#__PURE__*/function (_Readable2) {
   _inherits(PipelineResponse, _Readable2);
-  var _super2 = _createSuper(PipelineResponse);
   function PipelineResponse(resume) {
     var _this2;
     _classCallCheck(this, PipelineResponse);
-    _this2 = _super2.call(this, {
+    _this2 = _callSuper(this, PipelineResponse, [{
       autoDestroy: true
-    });
+    }]);
     _this2[kResume] = resume;
     return _this2;
   }
@@ -3689,7 +3683,6 @@ var PipelineResponse = /*#__PURE__*/function (_Readable2) {
 }(Readable);
 var PipelineHandler = /*#__PURE__*/function (_AsyncResource) {
   _inherits(PipelineHandler, _AsyncResource);
-  var _super3 = _createSuper(PipelineHandler);
   function PipelineHandler(opts, handler) {
     var _this3;
     _classCallCheck(this, PipelineHandler);
@@ -3713,7 +3706,7 @@ var PipelineHandler = /*#__PURE__*/function (_AsyncResource) {
     if (onInfo && typeof onInfo !== 'function') {
       throw new InvalidArgumentError('invalid onInfo callback');
     }
-    _this3 = _super3.call(this, 'UNDICI_PIPELINE');
+    _this3 = _callSuper(this, PipelineHandler, ['UNDICI_PIPELINE']);
     _this3.opaque = opaque || null;
     _this3.responseHeaders = responseHeaders || null;
     _this3.handler = handler;
@@ -3883,9 +3876,9 @@ module.exports = pipeline;
 
 var _classCallCheck = (__webpack_require__(6690)["default"]);
 var _createClass = (__webpack_require__(9728)["default"]);
+var _callSuper = (__webpack_require__(6976)["default"]);
 var _assertThisInitialized = (__webpack_require__(6115)["default"]);
 var _inherits = (__webpack_require__(1655)["default"]);
-var _createSuper = (__webpack_require__(6389)["default"]);
 var Readable = __webpack_require__(5077);
 var _require = __webpack_require__(7105),
   InvalidArgumentError = _require.InvalidArgumentError,
@@ -3900,7 +3893,6 @@ var _require4 = __webpack_require__(3128),
   removeSignal = _require4.removeSignal;
 var RequestHandler = /*#__PURE__*/function (_AsyncResource) {
   _inherits(RequestHandler, _AsyncResource);
-  var _super = _createSuper(RequestHandler);
   function RequestHandler(opts, callback) {
     var _this;
     _classCallCheck(this, RequestHandler);
@@ -3931,7 +3923,7 @@ var RequestHandler = /*#__PURE__*/function (_AsyncResource) {
       if (onInfo && typeof onInfo !== 'function') {
         throw new InvalidArgumentError('invalid onInfo callback');
       }
-      _this = _super.call(this, 'UNDICI_REQUEST');
+      _this = _callSuper(this, RequestHandler, ['UNDICI_REQUEST']);
     } catch (err) {
       if (util.isStream(body)) {
         util.destroy(body.on('error', util.nop), err);
@@ -4088,6 +4080,7 @@ function request(opts, callback) {
   }
 }
 module.exports = request;
+module.exports.RequestHandler = RequestHandler;
 
 /***/ }),
 
@@ -4099,9 +4092,9 @@ module.exports = request;
 
 var _classCallCheck = (__webpack_require__(6690)["default"]);
 var _createClass = (__webpack_require__(9728)["default"]);
+var _callSuper = (__webpack_require__(6976)["default"]);
 var _assertThisInitialized = (__webpack_require__(6115)["default"]);
 var _inherits = (__webpack_require__(1655)["default"]);
-var _createSuper = (__webpack_require__(6389)["default"]);
 var _require = __webpack_require__(2781),
   finished = _require.finished,
   PassThrough = _require.PassThrough;
@@ -4119,7 +4112,6 @@ var _require5 = __webpack_require__(3128),
   removeSignal = _require5.removeSignal;
 var StreamHandler = /*#__PURE__*/function (_AsyncResource) {
   _inherits(StreamHandler, _AsyncResource);
-  var _super = _createSuper(StreamHandler);
   function StreamHandler(opts, factory, callback) {
     var _this;
     _classCallCheck(this, StreamHandler);
@@ -4149,7 +4141,7 @@ var StreamHandler = /*#__PURE__*/function (_AsyncResource) {
       if (onInfo && typeof onInfo !== 'function') {
         throw new InvalidArgumentError('invalid onInfo callback');
       }
-      _this = _super.call(this, 'UNDICI_STREAM');
+      _this = _callSuper(this, StreamHandler, ['UNDICI_STREAM']);
     } catch (err) {
       if (util.isStream(body)) {
         util.destroy(body.on('error', util.nop), err);
@@ -4342,9 +4334,9 @@ module.exports = stream;
 var _objectSpread = (__webpack_require__(2122)["default"]);
 var _classCallCheck = (__webpack_require__(6690)["default"]);
 var _createClass = (__webpack_require__(9728)["default"]);
+var _callSuper = (__webpack_require__(6976)["default"]);
 var _assertThisInitialized = (__webpack_require__(6115)["default"]);
 var _inherits = (__webpack_require__(1655)["default"]);
-var _createSuper = (__webpack_require__(6389)["default"]);
 var _require = __webpack_require__(7105),
   InvalidArgumentError = _require.InvalidArgumentError,
   RequestAbortedError = _require.RequestAbortedError,
@@ -4358,7 +4350,6 @@ var _require3 = __webpack_require__(3128),
 var assert = __webpack_require__(9491);
 var UpgradeHandler = /*#__PURE__*/function (_AsyncResource) {
   _inherits(UpgradeHandler, _AsyncResource);
-  var _super = _createSuper(UpgradeHandler);
   function UpgradeHandler(opts, callback) {
     var _this;
     _classCallCheck(this, UpgradeHandler);
@@ -4374,7 +4365,7 @@ var UpgradeHandler = /*#__PURE__*/function (_AsyncResource) {
     if (signal && typeof signal.on !== 'function' && typeof signal.addEventListener !== 'function') {
       throw new InvalidArgumentError('signal must be an EventEmitter or EventTarget');
     }
-    _this = _super.call(this, 'UNDICI_UPGRADE');
+    _this = _callSuper(this, UpgradeHandler, ['UNDICI_UPGRADE']);
     _this.responseHeaders = responseHeaders || null;
     _this.opaque = opaque || null;
     _this.callback = callback;
@@ -4491,10 +4482,10 @@ var _regeneratorRuntime = (__webpack_require__(7061)["default"]);
 var _asyncToGenerator = (__webpack_require__(7156)["default"]);
 var _classCallCheck = (__webpack_require__(6690)["default"]);
 var _createClass = (__webpack_require__(9728)["default"]);
+var _callSuper = (__webpack_require__(6976)["default"]);
 var _get = (__webpack_require__(1588)["default"]);
 var _getPrototypeOf = (__webpack_require__(3808)["default"]);
 var _inherits = (__webpack_require__(1655)["default"]);
-var _createSuper = (__webpack_require__(6389)["default"]);
 var assert = __webpack_require__(9491);
 var _require = __webpack_require__(2781),
   Readable = _require.Readable;
@@ -4515,7 +4506,6 @@ var kContentType = Symbol('kContentType');
 var noop = function noop() {};
 module.exports = /*#__PURE__*/function (_Readable) {
   _inherits(BodyReadable, _Readable);
-  var _super = _createSuper(BodyReadable);
   function BodyReadable(_ref) {
     var _this;
     var resume = _ref.resume,
@@ -4525,11 +4515,11 @@ module.exports = /*#__PURE__*/function (_Readable) {
       _ref$highWaterMark = _ref.highWaterMark,
       highWaterMark = _ref$highWaterMark === void 0 ? 64 * 1024 : _ref$highWaterMark;
     _classCallCheck(this, BodyReadable);
-    _this = _super.call(this, {
+    _this = _callSuper(this, BodyReadable, [{
       autoDestroy: true,
       read: resume,
       highWaterMark: highWaterMark
-    });
+    }]);
     _this._readableState.dataEmitted = false;
     _this[kAbort] = abort;
     _this[kConsume] = null;
@@ -4766,7 +4756,7 @@ module.exports = /*#__PURE__*/function (_Readable) {
         }) : noop;
         _this2.on('close', function () {
           signalListenerCleanup();
-          if (signal !== null && signal !== void 0 && signal.aborted) {
+          if (signal && signal.aborted) {
             reject(signal.reason || Object.assign(new Error('The operation was aborted'), {
               name: 'AbortError'
             }));
@@ -5062,8 +5052,8 @@ var _createForOfIteratorHelper = (__webpack_require__(4704)["default"]);
 var _objectWithoutProperties = (__webpack_require__(215)["default"]);
 var _classCallCheck = (__webpack_require__(6690)["default"]);
 var _createClass = (__webpack_require__(9728)["default"]);
+var _callSuper = (__webpack_require__(6976)["default"]);
 var _inherits = (__webpack_require__(1655)["default"]);
-var _createSuper = (__webpack_require__(6389)["default"]);
 var _excluded = ["factory"];
 var _require = __webpack_require__(7105),
   BalancedPoolMissingUpstreamError = _require.BalancedPoolMissingUpstreamError,
@@ -5098,7 +5088,6 @@ function defaultFactory(origin, opts) {
 }
 var BalancedPool = /*#__PURE__*/function (_PoolBase) {
   _inherits(BalancedPool, _PoolBase);
-  var _super = _createSuper(BalancedPool);
   function BalancedPool() {
     var _this;
     var upstreams = arguments.length > 0 && arguments[0] !== undefined ? arguments[0] : [];
@@ -5107,7 +5096,7 @@ var BalancedPool = /*#__PURE__*/function (_PoolBase) {
       factory = _ref$factory === void 0 ? defaultFactory : _ref$factory,
       opts = _objectWithoutProperties(_ref, _excluded);
     _classCallCheck(this, BalancedPool);
-    _this = _super.call(this);
+    _this = _callSuper(this, BalancedPool);
     _this[kOptions] = opts;
     _this[kIndex] = -1;
     _this[kCurrentWeight] = 0;
@@ -5782,7 +5771,6 @@ var Cache = /*#__PURE__*/function () {
                     // 7.3.3
                     response: response // 7.3.4
                   };
-
                   operations.push(operation); // 7.3.5
 
                   index++; // 7.3.6
@@ -6751,13 +6739,13 @@ module.exports = {
 /***/ }),
 
 /***/ 9581:
-/***/ ((module) => {
+/***/ ((module, __unused_webpack_exports, __webpack_require__) => {
 
 "use strict";
 
 
 module.exports = {
-  kConstruct: Symbol('constructable')
+  kConstruct: (__webpack_require__(3329).kConstruct)
 };
 
 /***/ }),
@@ -6839,8 +6827,8 @@ var _asyncToGenerator = (__webpack_require__(7156)["default"]);
 var _objectSpread = (__webpack_require__(2122)["default"]);
 var _classCallCheck = (__webpack_require__(6690)["default"]);
 var _createClass = (__webpack_require__(9728)["default"]);
+var _callSuper = (__webpack_require__(6976)["default"]);
 var _inherits = (__webpack_require__(1655)["default"]);
-var _createSuper = (__webpack_require__(6389)["default"]);
 var _asyncIterator = (__webpack_require__(8237)["default"]);
 var assert = __webpack_require__(9491);
 var net = __webpack_require__(1808);
@@ -6967,7 +6955,6 @@ try {
  */
 var Client = /*#__PURE__*/function (_DispatcherBase) {
   _inherits(Client, _DispatcherBase);
-  var _super = _createSuper(Client);
   /**
    *
    * @param {string|URL} url
@@ -7004,7 +6991,7 @@ var Client = /*#__PURE__*/function (_DispatcherBase) {
       allowH2 = _ref.allowH2,
       maxConcurrentStreams = _ref.maxConcurrentStreams;
     _classCallCheck(this, Client);
-    _this = _super.call(this);
+    _this = _callSuper(this, Client);
     if (keepAlive !== undefined) {
       throw new InvalidArgumentError('unsupported keepAlive, use pipelining=0 instead');
     }
@@ -7115,7 +7102,6 @@ var Client = /*#__PURE__*/function (_DispatcherBase) {
       // Keep track of them to decide wether or not unref the session
       maxConcurrentStreams: maxConcurrentStreams != null ? maxConcurrentStreams : 100 // Max peerConcurrentStreams for a Node h2 server
     };
-
     _this[kHost] = "".concat(_this[kUrl].hostname).concat(_this[kUrl].port ? ":".concat(_this[kUrl].port) : '');
 
     // kQueue is built up of 3 sections separated by
@@ -10250,16 +10236,15 @@ module.exports = buildConnector;
 var _assertThisInitialized = (__webpack_require__(6115)["default"]);
 var _createClass = (__webpack_require__(9728)["default"]);
 var _classCallCheck = (__webpack_require__(6690)["default"]);
+var _callSuper = (__webpack_require__(6976)["default"]);
 var _inherits = (__webpack_require__(1655)["default"]);
-var _createSuper = (__webpack_require__(6389)["default"]);
 var _wrapNativeSuper = (__webpack_require__(3496)["default"]);
 var UndiciError = /*#__PURE__*/function (_Error) {
   _inherits(UndiciError, _Error);
-  var _super = _createSuper(UndiciError);
   function UndiciError(message) {
     var _this;
     _classCallCheck(this, UndiciError);
-    _this = _super.call(this, message);
+    _this = _callSuper(this, UndiciError, [message]);
     _this.name = 'UndiciError';
     _this.code = 'UND_ERR';
     return _this;
@@ -10268,11 +10253,10 @@ var UndiciError = /*#__PURE__*/function (_Error) {
 }( /*#__PURE__*/_wrapNativeSuper(Error));
 var ConnectTimeoutError = /*#__PURE__*/function (_UndiciError) {
   _inherits(ConnectTimeoutError, _UndiciError);
-  var _super2 = _createSuper(ConnectTimeoutError);
   function ConnectTimeoutError(message) {
     var _this2;
     _classCallCheck(this, ConnectTimeoutError);
-    _this2 = _super2.call(this, message);
+    _this2 = _callSuper(this, ConnectTimeoutError, [message]);
     Error.captureStackTrace(_assertThisInitialized(_this2), ConnectTimeoutError);
     _this2.name = 'ConnectTimeoutError';
     _this2.message = message || 'Connect Timeout Error';
@@ -10283,11 +10267,10 @@ var ConnectTimeoutError = /*#__PURE__*/function (_UndiciError) {
 }(UndiciError);
 var HeadersTimeoutError = /*#__PURE__*/function (_UndiciError2) {
   _inherits(HeadersTimeoutError, _UndiciError2);
-  var _super3 = _createSuper(HeadersTimeoutError);
   function HeadersTimeoutError(message) {
     var _this3;
     _classCallCheck(this, HeadersTimeoutError);
-    _this3 = _super3.call(this, message);
+    _this3 = _callSuper(this, HeadersTimeoutError, [message]);
     Error.captureStackTrace(_assertThisInitialized(_this3), HeadersTimeoutError);
     _this3.name = 'HeadersTimeoutError';
     _this3.message = message || 'Headers Timeout Error';
@@ -10298,11 +10281,10 @@ var HeadersTimeoutError = /*#__PURE__*/function (_UndiciError2) {
 }(UndiciError);
 var HeadersOverflowError = /*#__PURE__*/function (_UndiciError3) {
   _inherits(HeadersOverflowError, _UndiciError3);
-  var _super4 = _createSuper(HeadersOverflowError);
   function HeadersOverflowError(message) {
     var _this4;
     _classCallCheck(this, HeadersOverflowError);
-    _this4 = _super4.call(this, message);
+    _this4 = _callSuper(this, HeadersOverflowError, [message]);
     Error.captureStackTrace(_assertThisInitialized(_this4), HeadersOverflowError);
     _this4.name = 'HeadersOverflowError';
     _this4.message = message || 'Headers Overflow Error';
@@ -10313,11 +10295,10 @@ var HeadersOverflowError = /*#__PURE__*/function (_UndiciError3) {
 }(UndiciError);
 var BodyTimeoutError = /*#__PURE__*/function (_UndiciError4) {
   _inherits(BodyTimeoutError, _UndiciError4);
-  var _super5 = _createSuper(BodyTimeoutError);
   function BodyTimeoutError(message) {
     var _this5;
     _classCallCheck(this, BodyTimeoutError);
-    _this5 = _super5.call(this, message);
+    _this5 = _callSuper(this, BodyTimeoutError, [message]);
     Error.captureStackTrace(_assertThisInitialized(_this5), BodyTimeoutError);
     _this5.name = 'BodyTimeoutError';
     _this5.message = message || 'Body Timeout Error';
@@ -10328,11 +10309,10 @@ var BodyTimeoutError = /*#__PURE__*/function (_UndiciError4) {
 }(UndiciError);
 var ResponseStatusCodeError = /*#__PURE__*/function (_UndiciError5) {
   _inherits(ResponseStatusCodeError, _UndiciError5);
-  var _super6 = _createSuper(ResponseStatusCodeError);
   function ResponseStatusCodeError(message, statusCode, headers, body) {
     var _this6;
     _classCallCheck(this, ResponseStatusCodeError);
-    _this6 = _super6.call(this, message);
+    _this6 = _callSuper(this, ResponseStatusCodeError, [message]);
     Error.captureStackTrace(_assertThisInitialized(_this6), ResponseStatusCodeError);
     _this6.name = 'ResponseStatusCodeError';
     _this6.message = message || 'Response Status Code Error';
@@ -10347,11 +10327,10 @@ var ResponseStatusCodeError = /*#__PURE__*/function (_UndiciError5) {
 }(UndiciError);
 var InvalidArgumentError = /*#__PURE__*/function (_UndiciError6) {
   _inherits(InvalidArgumentError, _UndiciError6);
-  var _super7 = _createSuper(InvalidArgumentError);
   function InvalidArgumentError(message) {
     var _this7;
     _classCallCheck(this, InvalidArgumentError);
-    _this7 = _super7.call(this, message);
+    _this7 = _callSuper(this, InvalidArgumentError, [message]);
     Error.captureStackTrace(_assertThisInitialized(_this7), InvalidArgumentError);
     _this7.name = 'InvalidArgumentError';
     _this7.message = message || 'Invalid Argument Error';
@@ -10362,11 +10341,10 @@ var InvalidArgumentError = /*#__PURE__*/function (_UndiciError6) {
 }(UndiciError);
 var InvalidReturnValueError = /*#__PURE__*/function (_UndiciError7) {
   _inherits(InvalidReturnValueError, _UndiciError7);
-  var _super8 = _createSuper(InvalidReturnValueError);
   function InvalidReturnValueError(message) {
     var _this8;
     _classCallCheck(this, InvalidReturnValueError);
-    _this8 = _super8.call(this, message);
+    _this8 = _callSuper(this, InvalidReturnValueError, [message]);
     Error.captureStackTrace(_assertThisInitialized(_this8), InvalidReturnValueError);
     _this8.name = 'InvalidReturnValueError';
     _this8.message = message || 'Invalid Return Value Error';
@@ -10377,11 +10355,10 @@ var InvalidReturnValueError = /*#__PURE__*/function (_UndiciError7) {
 }(UndiciError);
 var RequestAbortedError = /*#__PURE__*/function (_UndiciError8) {
   _inherits(RequestAbortedError, _UndiciError8);
-  var _super9 = _createSuper(RequestAbortedError);
   function RequestAbortedError(message) {
     var _this9;
     _classCallCheck(this, RequestAbortedError);
-    _this9 = _super9.call(this, message);
+    _this9 = _callSuper(this, RequestAbortedError, [message]);
     Error.captureStackTrace(_assertThisInitialized(_this9), RequestAbortedError);
     _this9.name = 'AbortError';
     _this9.message = message || 'Request aborted';
@@ -10392,11 +10369,10 @@ var RequestAbortedError = /*#__PURE__*/function (_UndiciError8) {
 }(UndiciError);
 var InformationalError = /*#__PURE__*/function (_UndiciError9) {
   _inherits(InformationalError, _UndiciError9);
-  var _super10 = _createSuper(InformationalError);
   function InformationalError(message) {
     var _this10;
     _classCallCheck(this, InformationalError);
-    _this10 = _super10.call(this, message);
+    _this10 = _callSuper(this, InformationalError, [message]);
     Error.captureStackTrace(_assertThisInitialized(_this10), InformationalError);
     _this10.name = 'InformationalError';
     _this10.message = message || 'Request information';
@@ -10407,11 +10383,10 @@ var InformationalError = /*#__PURE__*/function (_UndiciError9) {
 }(UndiciError);
 var RequestContentLengthMismatchError = /*#__PURE__*/function (_UndiciError10) {
   _inherits(RequestContentLengthMismatchError, _UndiciError10);
-  var _super11 = _createSuper(RequestContentLengthMismatchError);
   function RequestContentLengthMismatchError(message) {
     var _this11;
     _classCallCheck(this, RequestContentLengthMismatchError);
-    _this11 = _super11.call(this, message);
+    _this11 = _callSuper(this, RequestContentLengthMismatchError, [message]);
     Error.captureStackTrace(_assertThisInitialized(_this11), RequestContentLengthMismatchError);
     _this11.name = 'RequestContentLengthMismatchError';
     _this11.message = message || 'Request body length does not match content-length header';
@@ -10422,11 +10397,10 @@ var RequestContentLengthMismatchError = /*#__PURE__*/function (_UndiciError10) {
 }(UndiciError);
 var ResponseContentLengthMismatchError = /*#__PURE__*/function (_UndiciError11) {
   _inherits(ResponseContentLengthMismatchError, _UndiciError11);
-  var _super12 = _createSuper(ResponseContentLengthMismatchError);
   function ResponseContentLengthMismatchError(message) {
     var _this12;
     _classCallCheck(this, ResponseContentLengthMismatchError);
-    _this12 = _super12.call(this, message);
+    _this12 = _callSuper(this, ResponseContentLengthMismatchError, [message]);
     Error.captureStackTrace(_assertThisInitialized(_this12), ResponseContentLengthMismatchError);
     _this12.name = 'ResponseContentLengthMismatchError';
     _this12.message = message || 'Response body length does not match content-length header';
@@ -10437,11 +10411,10 @@ var ResponseContentLengthMismatchError = /*#__PURE__*/function (_UndiciError11) 
 }(UndiciError);
 var ClientDestroyedError = /*#__PURE__*/function (_UndiciError12) {
   _inherits(ClientDestroyedError, _UndiciError12);
-  var _super13 = _createSuper(ClientDestroyedError);
   function ClientDestroyedError(message) {
     var _this13;
     _classCallCheck(this, ClientDestroyedError);
-    _this13 = _super13.call(this, message);
+    _this13 = _callSuper(this, ClientDestroyedError, [message]);
     Error.captureStackTrace(_assertThisInitialized(_this13), ClientDestroyedError);
     _this13.name = 'ClientDestroyedError';
     _this13.message = message || 'The client is destroyed';
@@ -10452,11 +10425,10 @@ var ClientDestroyedError = /*#__PURE__*/function (_UndiciError12) {
 }(UndiciError);
 var ClientClosedError = /*#__PURE__*/function (_UndiciError13) {
   _inherits(ClientClosedError, _UndiciError13);
-  var _super14 = _createSuper(ClientClosedError);
   function ClientClosedError(message) {
     var _this14;
     _classCallCheck(this, ClientClosedError);
-    _this14 = _super14.call(this, message);
+    _this14 = _callSuper(this, ClientClosedError, [message]);
     Error.captureStackTrace(_assertThisInitialized(_this14), ClientClosedError);
     _this14.name = 'ClientClosedError';
     _this14.message = message || 'The client is closed';
@@ -10467,11 +10439,10 @@ var ClientClosedError = /*#__PURE__*/function (_UndiciError13) {
 }(UndiciError);
 var SocketError = /*#__PURE__*/function (_UndiciError14) {
   _inherits(SocketError, _UndiciError14);
-  var _super15 = _createSuper(SocketError);
   function SocketError(message, socket) {
     var _this15;
     _classCallCheck(this, SocketError);
-    _this15 = _super15.call(this, message);
+    _this15 = _callSuper(this, SocketError, [message]);
     Error.captureStackTrace(_assertThisInitialized(_this15), SocketError);
     _this15.name = 'SocketError';
     _this15.message = message || 'Socket error';
@@ -10483,11 +10454,10 @@ var SocketError = /*#__PURE__*/function (_UndiciError14) {
 }(UndiciError);
 var NotSupportedError = /*#__PURE__*/function (_UndiciError15) {
   _inherits(NotSupportedError, _UndiciError15);
-  var _super16 = _createSuper(NotSupportedError);
   function NotSupportedError(message) {
     var _this16;
     _classCallCheck(this, NotSupportedError);
-    _this16 = _super16.call(this, message);
+    _this16 = _callSuper(this, NotSupportedError, [message]);
     Error.captureStackTrace(_assertThisInitialized(_this16), NotSupportedError);
     _this16.name = 'NotSupportedError';
     _this16.message = message || 'Not supported error';
@@ -10498,11 +10468,10 @@ var NotSupportedError = /*#__PURE__*/function (_UndiciError15) {
 }(UndiciError);
 var BalancedPoolMissingUpstreamError = /*#__PURE__*/function (_UndiciError16) {
   _inherits(BalancedPoolMissingUpstreamError, _UndiciError16);
-  var _super17 = _createSuper(BalancedPoolMissingUpstreamError);
   function BalancedPoolMissingUpstreamError(message) {
     var _this17;
     _classCallCheck(this, BalancedPoolMissingUpstreamError);
-    _this17 = _super17.call(this, message);
+    _this17 = _callSuper(this, BalancedPoolMissingUpstreamError, [message]);
     Error.captureStackTrace(_assertThisInitialized(_this17), NotSupportedError);
     _this17.name = 'MissingUpstreamError';
     _this17.message = message || 'No upstream has been added to the BalancedPool';
@@ -10513,11 +10482,10 @@ var BalancedPoolMissingUpstreamError = /*#__PURE__*/function (_UndiciError16) {
 }(UndiciError);
 var HTTPParserError = /*#__PURE__*/function (_Error2) {
   _inherits(HTTPParserError, _Error2);
-  var _super18 = _createSuper(HTTPParserError);
   function HTTPParserError(message, code, data) {
     var _this18;
     _classCallCheck(this, HTTPParserError);
-    _this18 = _super18.call(this, message);
+    _this18 = _callSuper(this, HTTPParserError, [message]);
     Error.captureStackTrace(_assertThisInitialized(_this18), HTTPParserError);
     _this18.name = 'HTTPParserError';
     _this18.code = code ? "HPE_".concat(code) : undefined;
@@ -10528,11 +10496,10 @@ var HTTPParserError = /*#__PURE__*/function (_Error2) {
 }( /*#__PURE__*/_wrapNativeSuper(Error));
 var ResponseExceededMaxSizeError = /*#__PURE__*/function (_UndiciError17) {
   _inherits(ResponseExceededMaxSizeError, _UndiciError17);
-  var _super19 = _createSuper(ResponseExceededMaxSizeError);
   function ResponseExceededMaxSizeError(message) {
     var _this19;
     _classCallCheck(this, ResponseExceededMaxSizeError);
-    _this19 = _super19.call(this, message);
+    _this19 = _callSuper(this, ResponseExceededMaxSizeError, [message]);
     Error.captureStackTrace(_assertThisInitialized(_this19), ResponseExceededMaxSizeError);
     _this19.name = 'ResponseExceededMaxSizeError';
     _this19.message = message || 'Response content exceeded max size';
@@ -10543,13 +10510,12 @@ var ResponseExceededMaxSizeError = /*#__PURE__*/function (_UndiciError17) {
 }(UndiciError);
 var RequestRetryError = /*#__PURE__*/function (_UndiciError18) {
   _inherits(RequestRetryError, _UndiciError18);
-  var _super20 = _createSuper(RequestRetryError);
   function RequestRetryError(message, code, _ref) {
     var _this20;
     var headers = _ref.headers,
       data = _ref.data;
     _classCallCheck(this, RequestRetryError);
-    _this20 = _super20.call(this, message);
+    _this20 = _callSuper(this, RequestRetryError, [message]);
     Error.captureStackTrace(_assertThisInitialized(_this20), RequestRetryError);
     _this20.name = 'RequestRetryError';
     _this20.message = message || 'Request retry error';
@@ -11120,7 +11086,8 @@ module.exports = {
   kHTTP1BuildRequest: Symbol('http1 build request'),
   kHTTP2CopyHeaders: Symbol('http2 copy headers'),
   kHTTPConnVersion: Symbol('http connection version'),
-  kRetryHandlerDefaultRetry: Symbol('retry agent default retry')
+  kRetryHandlerDefaultRetry: Symbol('retry agent default retry'),
+  kConstruct: Symbol('constructable')
 };
 
 /***/ }),
@@ -11663,8 +11630,8 @@ module.exports = {
 
 var _classCallCheck = (__webpack_require__(6690)["default"]);
 var _createClass = (__webpack_require__(9728)["default"]);
+var _callSuper = (__webpack_require__(6976)["default"]);
 var _inherits = (__webpack_require__(1655)["default"]);
-var _createSuper = (__webpack_require__(6389)["default"]);
 var Dispatcher = __webpack_require__(1666);
 var _require = __webpack_require__(7105),
   ClientDestroyedError = _require.ClientDestroyedError,
@@ -11682,11 +11649,10 @@ var kOnClosed = Symbol('onClosed');
 var kInterceptedDispatch = Symbol('Intercepted Dispatch');
 var DispatcherBase = /*#__PURE__*/function (_Dispatcher) {
   _inherits(DispatcherBase, _Dispatcher);
-  var _super = _createSuper(DispatcherBase);
   function DispatcherBase() {
     var _this;
     _classCallCheck(this, DispatcherBase);
-    _this = _super.call(this);
+    _this = _callSuper(this, DispatcherBase);
     _this[kDestroyed] = false;
     _this[kOnDestroyed] = null;
     _this[kClosed] = false;
@@ -11867,15 +11833,14 @@ module.exports = DispatcherBase;
 
 var _classCallCheck = (__webpack_require__(6690)["default"]);
 var _createClass = (__webpack_require__(9728)["default"]);
+var _callSuper = (__webpack_require__(6976)["default"]);
 var _inherits = (__webpack_require__(1655)["default"]);
-var _createSuper = (__webpack_require__(6389)["default"]);
 var EventEmitter = __webpack_require__(2361);
 var Dispatcher = /*#__PURE__*/function (_EventEmitter) {
   _inherits(Dispatcher, _EventEmitter);
-  var _super = _createSuper(Dispatcher);
   function Dispatcher() {
     _classCallCheck(this, Dispatcher);
-    return _super.apply(this, arguments);
+    return _callSuper(this, Dispatcher, arguments);
   }
   _createClass(Dispatcher, [{
     key: "dispatch",
@@ -13007,15 +12972,12 @@ function dataURLProcessor(dataURL) {
  */
 function URLSerializer(url) {
   var excludeFragment = arguments.length > 1 && arguments[1] !== undefined ? arguments[1] : false;
-  var href = url.href;
   if (!excludeFragment) {
-    return href;
+    return url.href;
   }
-  var hash = href.lastIndexOf('#');
-  if (hash === -1) {
-    return href;
-  }
-  return href.slice(0, hash);
+  var href = url.href;
+  var hashLength = url.hash.length;
+  return hashLength === 0 ? href : href.substring(0, href.length - hashLength);
 }
 
 // https://infra.spec.whatwg.org/#collect-a-sequence-of-code-points
@@ -13503,8 +13465,8 @@ var _createForOfIteratorHelper = (__webpack_require__(4704)["default"]);
 var _defineProperty = (__webpack_require__(8416)["default"]);
 var _classCallCheck = (__webpack_require__(6690)["default"]);
 var _createClass = (__webpack_require__(9728)["default"]);
+var _callSuper = (__webpack_require__(6976)["default"]);
 var _inherits = (__webpack_require__(1655)["default"]);
-var _createSuper = (__webpack_require__(6389)["default"]);
 var _require = __webpack_require__(4300),
   Blob = _require.Blob,
   NativeFile = _require.File;
@@ -13524,7 +13486,6 @@ var _require7 = __webpack_require__(3902),
 var encoder = new TextEncoder();
 var File = /*#__PURE__*/function (_Blob) {
   _inherits(File, _Blob);
-  var _super = _createSuper(File);
   function File(fileBits, fileName) {
     var _this;
     var options = arguments.length > 2 && arguments[2] !== undefined ? arguments[2] : {};
@@ -13583,9 +13544,9 @@ var File = /*#__PURE__*/function (_Blob) {
     // F.type is set to t.
     // F.lastModified is set to d.
 
-    _this = _super.call(this, processBlobParts(fileBits, options), {
+    _this = _callSuper(this, File, [processBlobParts(fileBits, options), {
       type: t
-    });
+    }]);
     _this[kState] = {
       name: n,
       lastModified: d,
@@ -14224,7 +14185,8 @@ var _createClass = (__webpack_require__(9728)["default"]);
 var _defineProperty = (__webpack_require__(8416)["default"]);
 var _Symbol$iterator;
 var _require = __webpack_require__(3329),
-  kHeadersList = _require.kHeadersList;
+  kHeadersList = _require.kHeadersList,
+  kConstruct = _require.kConstruct;
 var _require2 = __webpack_require__(102),
   kGuard = _require2.kGuard;
 var _require3 = __webpack_require__(3902),
@@ -14517,6 +14479,9 @@ var Headers = /*#__PURE__*/function (_Symbol$for) {
   function Headers() {
     var init = arguments.length > 0 && arguments[0] !== undefined ? arguments[0] : undefined;
     _classCallCheck(this, Headers);
+    if (init === kConstruct) {
+      return;
+    }
     this[kHeadersList] = new HeadersList();
 
     // The new Headers(init) constructor steps are:
@@ -14897,8 +14862,8 @@ var _createForOfIteratorHelper = (__webpack_require__(4704)["default"]);
 var _asyncToGenerator = (__webpack_require__(7156)["default"]);
 var _classCallCheck = (__webpack_require__(6690)["default"]);
 var _createClass = (__webpack_require__(9728)["default"]);
+var _callSuper = (__webpack_require__(6976)["default"]);
 var _inherits = (__webpack_require__(1655)["default"]);
-var _createSuper = (__webpack_require__(6389)["default"]);
 var _asyncGeneratorDelegate = (__webpack_require__(8131)["default"]);
 var _asyncIterator = (__webpack_require__(8237)["default"]);
 var _awaitAsyncGenerator = (__webpack_require__(6737)["default"]);
@@ -14989,11 +14954,10 @@ var resolveObjectURL;
 var ReadableStream = globalThis.ReadableStream;
 var Fetch = /*#__PURE__*/function (_EE) {
   _inherits(Fetch, _EE);
-  var _super = _createSuper(Fetch);
   function Fetch(dispatcher) {
     var _this;
     _classCallCheck(this, Fetch);
-    _this = _super.call(this);
+    _this = _callSuper(this, Fetch);
     _this.dispatcher = dispatcher;
     _this.connection = null;
     _this.dump = false;
@@ -15214,7 +15178,7 @@ function finalizeAndReportTiming(response) {
   }
 
   // 8. If response’s timing allow passed flag is not set, then:
-  if (!timingInfo.timingAllowPassed) {
+  if (!response.timingAllowPassed) {
     //  1. Set timingInfo to a the result of creating an opaque timing info for timingInfo.
     timingInfo = createOpaqueTimingInfo({
       startTime: timingInfo.startTime
@@ -17296,7 +17260,8 @@ var _require8 = __webpack_require__(2369),
 var _require9 = __webpack_require__(645),
   URLSerializer = _require9.URLSerializer;
 var _require10 = __webpack_require__(3329),
-  kHeadersList = _require10.kHeadersList;
+  kHeadersList = _require10.kHeadersList,
+  kConstruct = _require10.kConstruct;
 var assert = __webpack_require__(9491);
 var _require11 = __webpack_require__(2361),
   getMaxListeners = _require11.getMaxListeners,
@@ -17304,7 +17269,6 @@ var _require11 = __webpack_require__(2361),
   getEventListeners = _require11.getEventListeners,
   defaultMaxListeners = _require11.defaultMaxListeners;
 var TransformStream = globalThis.TransformStream;
-var kInit = Symbol('init');
 var kAbortController = Symbol('abortController');
 var requestFinalizer = new FinalizationRegistry(function (_ref) {
   var signal = _ref.signal,
@@ -17319,7 +17283,7 @@ var Request = /*#__PURE__*/function () {
     var _request$window, _initBody;
     var init = arguments.length > 1 && arguments[1] !== undefined ? arguments[1] : {};
     _classCallCheck(this, Request);
-    if (input === kInit) {
+    if (input === kConstruct) {
       return;
     }
     webidl.argumentLengthCheck(arguments, 1, {
@@ -17571,7 +17535,7 @@ var Request = /*#__PURE__*/function () {
     }
 
     // 23. If init["integrity"] exists, then set request’s integrity metadata to it.
-    if (init.integrity !== undefined && init.integrity != null) {
+    if (init.integrity != null) {
       request.integrity = String(init.integrity);
     }
 
@@ -17661,7 +17625,7 @@ var Request = /*#__PURE__*/function () {
     // 30. Set this’s headers to a new Headers object with this’s relevant
     // Realm, whose header list is request’s header list and guard is
     // "request".
-    this[kHeaders] = new Headers();
+    this[kHeaders] = new Headers(kConstruct);
     this[kHeaders][kHeadersList] = request.headersList;
     this[kHeaders][kGuard] = 'request';
     this[kHeaders][kRealm] = this[kRealm];
@@ -18024,10 +17988,10 @@ var Request = /*#__PURE__*/function () {
 
       // 3. Let clonedRequestObject be the result of creating a Request object,
       // given clonedRequest, this’s headers’s guard, and this’s relevant Realm.
-      var clonedRequestObject = new Request(kInit);
+      var clonedRequestObject = new Request(kConstruct);
       clonedRequestObject[kState] = clonedRequest;
       clonedRequestObject[kRealm] = this[kRealm];
-      clonedRequestObject[kHeaders] = new Headers();
+      clonedRequestObject[kHeaders] = new Headers(kConstruct);
       clonedRequestObject[kHeaders][kHeadersList] = clonedRequest.headersList;
       clonedRequestObject[kHeaders][kGuard] = this[kHeaders][kGuard];
       clonedRequestObject[kHeaders][kRealm] = this[kHeaders][kRealm];
@@ -18266,7 +18230,8 @@ var _require8 = __webpack_require__(2369),
 var _require9 = __webpack_require__(645),
   URLSerializer = _require9.URLSerializer;
 var _require10 = __webpack_require__(3329),
-  kHeadersList = _require10.kHeadersList;
+  kHeadersList = _require10.kHeadersList,
+  kConstruct = _require10.kConstruct;
 var assert = __webpack_require__(9491);
 var _require11 = __webpack_require__(3837),
   types = _require11.types;
@@ -18296,7 +18261,7 @@ var Response = /*#__PURE__*/function () {
     // 2. Set this’s headers to a new Headers object with this’s relevant
     // Realm, whose header list is this’s response’s header list and guard
     // is "response".
-    this[kHeaders] = new Headers();
+    this[kHeaders] = new Headers(kConstruct);
     this[kHeaders][kGuard] = 'response';
     this[kHeaders][kHeadersList] = this[kState].headersList;
     this[kHeaders][kRealm] = this[kRealm];
@@ -18778,7 +18743,7 @@ webidl.converters.XMLHttpRequestBodyInit = function (V) {
       strict: false
     });
   }
-  if (types.isAnyArrayBuffer(V) || types.isTypedArray(V) || types.isDataView(V)) {
+  if (types.isArrayBuffer(V) || types.isTypedArray(V) || types.isDataView(V)) {
     return webidl.converters.BufferSource(V);
   }
   if (util.isFormDataLike(V)) {
@@ -19148,7 +19113,6 @@ function appendRequestOriginHeader(request) {
       default:
       // Do nothing.
     }
-
     if (serializedOrigin) {
       // 2. Append (`Origin`, serializedOrigin) to request’s header list.
       request.headersList.append('origin', serializedOrigin);
@@ -20900,8 +20864,8 @@ module.exports = {
 var _defineProperty = (__webpack_require__(8416)["default"]);
 var _classCallCheck = (__webpack_require__(6690)["default"]);
 var _createClass = (__webpack_require__(9728)["default"]);
+var _callSuper = (__webpack_require__(6976)["default"]);
 var _inherits = (__webpack_require__(1655)["default"]);
-var _createSuper = (__webpack_require__(6389)["default"]);
 var _wrapNativeSuper = (__webpack_require__(3496)["default"]);
 var _require = __webpack_require__(6528),
   staticPropertyDescriptors = _require.staticPropertyDescriptors,
@@ -20919,11 +20883,10 @@ var _require4 = __webpack_require__(3902),
   kEnumerableProperty = _require4.kEnumerableProperty;
 var FileReader = /*#__PURE__*/function (_EventTarget) {
   _inherits(FileReader, _EventTarget);
-  var _super = _createSuper(FileReader);
   function FileReader() {
     var _this;
     _classCallCheck(this, FileReader);
-    _this = _super.call(this);
+    _this = _callSuper(this, FileReader);
     _this[kState] = 'empty';
     _this[kResult] = null;
     _this[kError] = null;
@@ -21263,8 +21226,8 @@ module.exports = {
 
 var _classCallCheck = (__webpack_require__(6690)["default"]);
 var _createClass = (__webpack_require__(9728)["default"]);
+var _callSuper = (__webpack_require__(6976)["default"]);
 var _inherits = (__webpack_require__(1655)["default"]);
-var _createSuper = (__webpack_require__(6389)["default"]);
 var _wrapNativeSuper = (__webpack_require__(3496)["default"]);
 var _require = __webpack_require__(3441),
   webidl = _require.webidl;
@@ -21275,7 +21238,6 @@ var kState = Symbol('ProgressEvent state');
  */
 var ProgressEvent = /*#__PURE__*/function (_Event) {
   _inherits(ProgressEvent, _Event);
-  var _super = _createSuper(ProgressEvent);
   function ProgressEvent(type) {
     var _eventInitDict;
     var _this;
@@ -21283,7 +21245,7 @@ var ProgressEvent = /*#__PURE__*/function (_Event) {
     _classCallCheck(this, ProgressEvent);
     type = webidl.converters.DOMString(type);
     eventInitDict = webidl.converters.ProgressEventInit((_eventInitDict = eventInitDict) !== null && _eventInitDict !== void 0 ? _eventInitDict : {});
-    _this = _super.call(this, type, eventInitDict);
+    _this = _callSuper(this, ProgressEvent, [type, eventInitDict]);
     _this[kState] = {
       lengthComputable: eventInitDict.lengthComputable,
       loaded: eventInitDict.loaded,
@@ -22166,7 +22128,7 @@ var _objectWithoutProperties = (__webpack_require__(215)["default"]);
 var _classCallCheck = (__webpack_require__(6690)["default"]);
 var _createClass = (__webpack_require__(9728)["default"]);
 var _excluded = ["retryOptions"];
-var assert = __webpack_require__(8061);
+var assert = __webpack_require__(9491);
 var _require = __webpack_require__(3329),
   kRetryHandlerDefaultRetry = _require.kRetryHandlerDefaultRetry;
 var _require2 = __webpack_require__(7105),
@@ -22261,7 +22223,7 @@ var RetryHandler = /*#__PURE__*/function () {
   }, {
     key: "onBodySent",
     value: function onBodySent(chunk) {
-      return this.handler.onBodySent(chunk);
+      if (this.handler.onBodySent) return this.handler.onBodySent(chunk);
     }
   }, {
     key: "onHeaders",
@@ -22440,7 +22402,6 @@ var RetryHandler = /*#__PURE__*/function () {
         retryAfterHeader = Number(retryAfterHeader);
         retryAfterHeader = isNaN(retryAfterHeader) ? calculateRetryAfterHeader(retryAfterHeader) : retryAfterHeader * 1e3; // Retry-After is in seconds
       }
-
       var retryTimeout = retryAfterHeader > 0 ? Math.min(retryAfterHeader, maxTimeout) : Math.min(currentTimeout * Math.pow(timeoutFactor, counter), maxTimeout);
       state.currentTimeout = retryTimeout;
       setTimeout(function () {
@@ -22781,8 +22742,8 @@ var _objectSpread = (__webpack_require__(2122)["default"]);
 var _slicedToArray = (__webpack_require__(7424)["default"]);
 var _regeneratorRuntime = (__webpack_require__(7061)["default"]);
 var _asyncToGenerator = (__webpack_require__(7156)["default"]);
+var _callSuper = (__webpack_require__(6976)["default"]);
 var _inherits = (__webpack_require__(1655)["default"]);
-var _createSuper = (__webpack_require__(6389)["default"]);
 var _classCallCheck = (__webpack_require__(6690)["default"]);
 var _createClass = (__webpack_require__(9728)["default"]);
 var _require = __webpack_require__(3329),
@@ -22824,11 +22785,10 @@ var FakeWeakRef = /*#__PURE__*/function () {
 }();
 var MockAgent = /*#__PURE__*/function (_Dispatcher) {
   _inherits(MockAgent, _Dispatcher);
-  var _super = _createSuper(MockAgent);
   function MockAgent(opts) {
     var _this;
     _classCallCheck(this, MockAgent);
-    _this = _super.call(this, opts);
+    _this = _callSuper(this, MockAgent, [opts]);
     _this[kNetConnect] = true;
     _this[kIsMockActive] = true;
 
@@ -23015,9 +22975,9 @@ var _regeneratorRuntime = (__webpack_require__(7061)["default"]);
 var _asyncToGenerator = (__webpack_require__(7156)["default"]);
 var _classCallCheck = (__webpack_require__(6690)["default"]);
 var _createClass = (__webpack_require__(9728)["default"]);
+var _callSuper = (__webpack_require__(6976)["default"]);
 var _assertThisInitialized = (__webpack_require__(6115)["default"]);
 var _inherits = (__webpack_require__(1655)["default"]);
-var _createSuper = (__webpack_require__(6389)["default"]);
 var _require = __webpack_require__(3837),
   promisify = _require.promisify;
 var Client = __webpack_require__(8517);
@@ -23042,11 +23002,10 @@ var _require5 = __webpack_require__(7105),
  */
 var MockClient = /*#__PURE__*/function (_Client, _Symbols$kConnected) {
   _inherits(MockClient, _Client);
-  var _super = _createSuper(MockClient);
   function MockClient(origin, opts) {
     var _this;
     _classCallCheck(this, MockClient);
-    _this = _super.call(this, origin, opts);
+    _this = _callSuper(this, MockClient, [origin, opts]);
     if (!opts || !opts.agent || typeof opts.agent.dispatch !== 'function') {
       throw new InvalidArgumentError('Argument opts.agent must implement Agent');
     }
@@ -23112,18 +23071,17 @@ module.exports = MockClient;
 
 var _createClass = (__webpack_require__(9728)["default"]);
 var _classCallCheck = (__webpack_require__(6690)["default"]);
+var _callSuper = (__webpack_require__(6976)["default"]);
 var _assertThisInitialized = (__webpack_require__(6115)["default"]);
 var _inherits = (__webpack_require__(1655)["default"]);
-var _createSuper = (__webpack_require__(6389)["default"]);
 var _require = __webpack_require__(7105),
   UndiciError = _require.UndiciError;
 var MockNotMatchedError = /*#__PURE__*/function (_UndiciError) {
   _inherits(MockNotMatchedError, _UndiciError);
-  var _super = _createSuper(MockNotMatchedError);
   function MockNotMatchedError(message) {
     var _this;
     _classCallCheck(this, MockNotMatchedError);
-    _this = _super.call(this, message);
+    _this = _callSuper(this, MockNotMatchedError, [message]);
     Error.captureStackTrace(_assertThisInitialized(_this), MockNotMatchedError);
     _this.name = 'MockNotMatchedError';
     _this.message = message || 'The request does not match any registered mock dispatches';
@@ -23400,9 +23358,9 @@ var _regeneratorRuntime = (__webpack_require__(7061)["default"]);
 var _asyncToGenerator = (__webpack_require__(7156)["default"]);
 var _classCallCheck = (__webpack_require__(6690)["default"]);
 var _createClass = (__webpack_require__(9728)["default"]);
+var _callSuper = (__webpack_require__(6976)["default"]);
 var _assertThisInitialized = (__webpack_require__(6115)["default"]);
 var _inherits = (__webpack_require__(1655)["default"]);
-var _createSuper = (__webpack_require__(6389)["default"]);
 var _require = __webpack_require__(3837),
   promisify = _require.promisify;
 var Pool = __webpack_require__(7854);
@@ -23427,11 +23385,10 @@ var _require5 = __webpack_require__(7105),
  */
 var MockPool = /*#__PURE__*/function (_Pool, _Symbols$kConnected) {
   _inherits(MockPool, _Pool);
-  var _super = _createSuper(MockPool);
   function MockPool(origin, opts) {
     var _this;
     _classCallCheck(this, MockPool);
-    _this = _super.call(this, origin, opts);
+    _this = _callSuper(this, MockPool, [origin, opts]);
     if (!opts || !opts.agent || typeof opts.agent.dispatch !== 'function') {
       throw new InvalidArgumentError('Argument opts.agent must implement Agent');
     }
@@ -24224,9 +24181,9 @@ var _createForOfIteratorHelper = (__webpack_require__(4704)["default"]);
 var _toConsumableArray = (__webpack_require__(861)["default"]);
 var _classCallCheck = (__webpack_require__(6690)["default"]);
 var _createClass = (__webpack_require__(9728)["default"]);
+var _callSuper = (__webpack_require__(6976)["default"]);
 var _assertThisInitialized = (__webpack_require__(6115)["default"]);
 var _inherits = (__webpack_require__(1655)["default"]);
-var _createSuper = (__webpack_require__(6389)["default"]);
 var DispatcherBase = __webpack_require__(8670);
 var FixedQueue = __webpack_require__(6763);
 var _require = __webpack_require__(3329),
@@ -24256,11 +24213,10 @@ var kRemoveClient = Symbol('remove client');
 var kStats = Symbol('stats');
 var PoolBase = /*#__PURE__*/function (_DispatcherBase) {
   _inherits(PoolBase, _DispatcherBase);
-  var _super = _createSuper(PoolBase);
   function PoolBase() {
     var _this;
     _classCallCheck(this, PoolBase);
-    _this = _super.call(this);
+    _this = _callSuper(this, PoolBase);
     _this[kQueue] = new FixedQueue();
     _this[kClients] = [];
     _this[kQueued] = 0;
@@ -24568,8 +24524,8 @@ var _objectSpread = (__webpack_require__(2122)["default"]);
 var _objectWithoutProperties = (__webpack_require__(215)["default"]);
 var _classCallCheck = (__webpack_require__(6690)["default"]);
 var _createClass = (__webpack_require__(9728)["default"]);
+var _callSuper = (__webpack_require__(6976)["default"]);
 var _inherits = (__webpack_require__(1655)["default"]);
-var _createSuper = (__webpack_require__(6389)["default"]);
 var _excluded = ["connections", "factory", "connect", "connectTimeout", "tls", "maxCachedSessions", "socketPath", "autoSelectFamily", "autoSelectFamilyAttemptTimeout", "allowH2"];
 var _require = __webpack_require__(8334),
   PoolBase = _require.PoolBase,
@@ -24593,7 +24549,6 @@ function defaultFactory(origin, opts) {
 }
 var Pool = /*#__PURE__*/function (_PoolBase) {
   _inherits(Pool, _PoolBase);
-  var _super = _createSuper(Pool);
   function Pool(origin) {
     var _this;
     var _ref = arguments.length > 1 && arguments[1] !== undefined ? arguments[1] : {},
@@ -24610,7 +24565,7 @@ var Pool = /*#__PURE__*/function (_PoolBase) {
       allowH2 = _ref.allowH2,
       options = _objectWithoutProperties(_ref, _excluded);
     _classCallCheck(this, Pool);
-    _this = _super.call(this);
+    _this = _callSuper(this, Pool);
     if (connections != null && (!Number.isFinite(connections) || connections < 0)) {
       throw new InvalidArgumentError('invalid connections');
     }
@@ -24675,8 +24630,8 @@ var _asyncToGenerator = (__webpack_require__(7156)["default"]);
 var _objectSpread = (__webpack_require__(2122)["default"]);
 var _classCallCheck = (__webpack_require__(6690)["default"]);
 var _createClass = (__webpack_require__(9728)["default"]);
+var _callSuper = (__webpack_require__(6976)["default"]);
 var _inherits = (__webpack_require__(1655)["default"]);
-var _createSuper = (__webpack_require__(6389)["default"]);
 var _require = __webpack_require__(3329),
   kProxy = _require.kProxy,
   kClose = _require.kClose,
@@ -24719,11 +24674,10 @@ function defaultFactory(origin, opts) {
 }
 var ProxyAgent = /*#__PURE__*/function (_DispatcherBase) {
   _inherits(ProxyAgent, _DispatcherBase);
-  var _super = _createSuper(ProxyAgent);
   function ProxyAgent(opts) {
     var _this;
     _classCallCheck(this, ProxyAgent);
-    _this = _super.call(this, opts);
+    _this = _callSuper(this, ProxyAgent, [opts]);
     _this[kProxy] = buildProxyOptions(opts);
     _this[kAgent] = new Agent(opts);
     _this[kInterceptors] = opts.interceptors && opts.interceptors.ProxyAgent && Array.isArray(opts.interceptors.ProxyAgent) ? opts.interceptors.ProxyAgent : [];
@@ -24744,6 +24698,12 @@ var ProxyAgent = /*#__PURE__*/function (_DispatcherBase) {
     _this[kRequestTls] = opts.requestTls;
     _this[kProxyTls] = opts.proxyTls;
     _this[kProxyHeaders] = opts.headers || {};
+    var resolvedUrl = new URL(opts.uri);
+    var origin = resolvedUrl.origin,
+      port = resolvedUrl.port,
+      host = resolvedUrl.host,
+      username = resolvedUrl.username,
+      password = resolvedUrl.password;
     if (opts.auth && opts.token) {
       throw new InvalidArgumentError('opts.auth cannot be used in combination with opts.token');
     } else if (opts.auth) {
@@ -24751,11 +24711,9 @@ var ProxyAgent = /*#__PURE__*/function (_DispatcherBase) {
       _this[kProxyHeaders]['proxy-authorization'] = "Basic ".concat(opts.auth);
     } else if (opts.token) {
       _this[kProxyHeaders]['proxy-authorization'] = opts.token;
+    } else if (username && password) {
+      _this[kProxyHeaders]['proxy-authorization'] = "Basic ".concat(Buffer.from("".concat(decodeURIComponent(username), ":").concat(decodeURIComponent(password))).toString('base64'));
     }
-    var resolvedUrl = new URL(opts.uri);
-    var origin = resolvedUrl.origin,
-      port = resolvedUrl.port,
-      host = resolvedUrl.host;
     var connect = buildConnector(_objectSpread({}, opts.proxyTls));
     _this[kConnectEndpoint] = buildConnector(_objectSpread({}, opts.requestTls));
     _this[kClient] = clientFactory(resolvedUrl, {
@@ -24789,7 +24747,7 @@ var ProxyAgent = /*#__PURE__*/function (_DispatcherBase) {
                 statusCode = _yield$_this$kClient$.statusCode;
                 if (statusCode !== 200) {
                   socket.on('error', function () {}).destroy();
-                  callback(new RequestAbortedError('Proxy response !== 200 when HTTP Tunneling'));
+                  callback(new RequestAbortedError("Proxy response (".concat(statusCode, ") !== 200 when HTTP Tunneling")));
                 }
                 if (!(opts.protocol !== 'https:')) {
                   _context.next = 12;
@@ -25405,9 +25363,9 @@ module.exports = {
 var _defineProperty = (__webpack_require__(8416)["default"]);
 var _classCallCheck = (__webpack_require__(6690)["default"]);
 var _createClass = (__webpack_require__(9728)["default"]);
+var _callSuper = (__webpack_require__(6976)["default"]);
 var _assertThisInitialized = (__webpack_require__(6115)["default"]);
 var _inherits = (__webpack_require__(1655)["default"]);
-var _createSuper = (__webpack_require__(6389)["default"]);
 var _wrapNativeSuper = (__webpack_require__(3496)["default"]);
 var _classPrivateFieldInitSpec = (__webpack_require__(9159)["default"]);
 var _classPrivateFieldGet = (__webpack_require__(468)["default"]);
@@ -25425,7 +25383,6 @@ var _require3 = __webpack_require__(1267),
 var _eventInit = /*#__PURE__*/new WeakMap();
 var MessageEvent = /*#__PURE__*/function (_Event) {
   _inherits(MessageEvent, _Event);
-  var _super = _createSuper(MessageEvent);
   function MessageEvent(type) {
     var _this;
     var eventInitDict = arguments.length > 1 && arguments[1] !== undefined ? arguments[1] : {};
@@ -25435,7 +25392,7 @@ var MessageEvent = /*#__PURE__*/function (_Event) {
     });
     type = webidl.converters.DOMString(type);
     eventInitDict = webidl.converters.MessageEventInit(eventInitDict);
-    _this = _super.call(this, type, eventInitDict);
+    _this = _callSuper(this, MessageEvent, [type, eventInitDict]);
     _classPrivateFieldInitSpec(_assertThisInitialized(_this), _eventInit, {
       writable: true,
       value: void 0
@@ -25509,7 +25466,6 @@ var MessageEvent = /*#__PURE__*/function (_Event) {
 var _eventInit2 = /*#__PURE__*/new WeakMap();
 var CloseEvent = /*#__PURE__*/function (_Event2) {
   _inherits(CloseEvent, _Event2);
-  var _super2 = _createSuper(CloseEvent);
   function CloseEvent(type) {
     var _this2;
     var eventInitDict = arguments.length > 1 && arguments[1] !== undefined ? arguments[1] : {};
@@ -25519,7 +25475,7 @@ var CloseEvent = /*#__PURE__*/function (_Event2) {
     });
     type = webidl.converters.DOMString(type);
     eventInitDict = webidl.converters.CloseEventInit(eventInitDict);
-    _this2 = _super2.call(this, type, eventInitDict);
+    _this2 = _callSuper(this, CloseEvent, [type, eventInitDict]);
     _classPrivateFieldInitSpec(_assertThisInitialized(_this2), _eventInit2, {
       writable: true,
       value: void 0
@@ -25551,7 +25507,6 @@ var CloseEvent = /*#__PURE__*/function (_Event2) {
 var _eventInit3 = /*#__PURE__*/new WeakMap();
 var ErrorEvent = /*#__PURE__*/function (_Event3) {
   _inherits(ErrorEvent, _Event3);
-  var _super3 = _createSuper(ErrorEvent);
   function ErrorEvent(type, eventInitDict) {
     var _eventInitDict;
     var _this3;
@@ -25559,7 +25514,7 @@ var ErrorEvent = /*#__PURE__*/function (_Event3) {
     webidl.argumentLengthCheck(arguments, 1, {
       header: 'ErrorEvent constructor'
     });
-    _this3 = _super3.call(this, type, eventInitDict);
+    _this3 = _callSuper(this, ErrorEvent, [type, eventInitDict]);
     _classPrivateFieldInitSpec(_assertThisInitialized(_this3), _eventInit3, {
       writable: true,
       value: void 0
@@ -25781,9 +25736,9 @@ module.exports = {
 
 var _classCallCheck = (__webpack_require__(6690)["default"]);
 var _createClass = (__webpack_require__(9728)["default"]);
+var _callSuper = (__webpack_require__(6976)["default"]);
 var _assertThisInitialized = (__webpack_require__(6115)["default"]);
 var _inherits = (__webpack_require__(1655)["default"]);
-var _createSuper = (__webpack_require__(6389)["default"]);
 var _classPrivateFieldInitSpec = (__webpack_require__(9159)["default"]);
 var _classPrivateFieldSet = (__webpack_require__(5661)["default"]);
 var _classPrivateFieldGet = (__webpack_require__(468)["default"]);
@@ -25822,11 +25777,10 @@ var _info = /*#__PURE__*/new WeakMap();
 var _fragments = /*#__PURE__*/new WeakMap();
 var ByteParser = /*#__PURE__*/function (_Writable) {
   _inherits(ByteParser, _Writable);
-  var _super = _createSuper(ByteParser);
   function ByteParser(ws) {
     var _this;
     _classCallCheck(this, ByteParser);
-    _this = _super.call(this);
+    _this = _callSuper(this, ByteParser);
     _classPrivateFieldInitSpec(_assertThisInitialized(_this), _buffers, {
       writable: true,
       value: []
@@ -26322,7 +26276,6 @@ function isValidStatusCode(code) {
     code !== 1006 // "MUST NOT be set as a status code"
     ;
   }
-
   return code >= 3000 && code <= 4999;
 }
 
@@ -26365,9 +26318,9 @@ module.exports = {
 var _defineProperty = (__webpack_require__(8416)["default"]);
 var _classCallCheck = (__webpack_require__(6690)["default"]);
 var _createClass = (__webpack_require__(9728)["default"]);
+var _callSuper = (__webpack_require__(6976)["default"]);
 var _assertThisInitialized = (__webpack_require__(6115)["default"]);
 var _inherits = (__webpack_require__(1655)["default"]);
-var _createSuper = (__webpack_require__(6389)["default"]);
 var _wrapNativeSuper = (__webpack_require__(3496)["default"]);
 var _classPrivateMethodInitSpec = (__webpack_require__(1860)["default"]);
 var _classPrivateFieldInitSpec = (__webpack_require__(9159)["default"]);
@@ -26424,7 +26377,6 @@ var _extensions = /*#__PURE__*/new WeakMap();
 var _onConnectionEstablished = /*#__PURE__*/new WeakSet();
 var WebSocket = /*#__PURE__*/function (_EventTarget) {
   _inherits(WebSocket, _EventTarget);
-  var _super = _createSuper(WebSocket);
   /**
    * @param {string} url
    * @param {string|string[]} protocols
@@ -26433,7 +26385,7 @@ var WebSocket = /*#__PURE__*/function (_EventTarget) {
     var _this;
     var protocols = arguments.length > 1 && arguments[1] !== undefined ? arguments[1] : [];
     _classCallCheck(this, WebSocket);
-    _this = _super.call(this);
+    _this = _callSuper(this, WebSocket);
     /**
      * @see https://websockets.spec.whatwg.org/#feedback-from-the-protocol
      */
@@ -27429,14 +27381,6 @@ module.exports = require("net");
 
 /***/ }),
 
-/***/ 8061:
-/***/ ((module) => {
-
-"use strict";
-module.exports = require("node:assert");
-
-/***/ }),
-
 /***/ 5673:
 /***/ ((module) => {
 
@@ -27820,6 +27764,19 @@ module.exports = _awaitAsyncGenerator, module.exports.__esModule = true, module.
 
 /***/ }),
 
+/***/ 6976:
+/***/ ((module, __unused_webpack_exports, __webpack_require__) => {
+
+var getPrototypeOf = __webpack_require__(3808);
+var isNativeReflectConstruct = __webpack_require__(9617);
+var possibleConstructorReturn = __webpack_require__(4993);
+function _callSuper(t, o, e) {
+  return o = getPrototypeOf(o), possibleConstructorReturn(t, isNativeReflectConstruct() ? Reflect.construct(o, e || [], getPrototypeOf(t).constructor) : o.apply(t, e));
+}
+module.exports = _callSuper, module.exports.__esModule = true, module.exports["default"] = module.exports;
+
+/***/ }),
+
 /***/ 6521:
 /***/ ((module) => {
 
@@ -27956,20 +27913,12 @@ module.exports = _classPrivateMethodInitSpec, module.exports.__esModule = true, 
 
 var setPrototypeOf = __webpack_require__(6015);
 var isNativeReflectConstruct = __webpack_require__(9617);
-function _construct(Parent, args, Class) {
-  if (isNativeReflectConstruct()) {
-    module.exports = _construct = Reflect.construct.bind(), module.exports.__esModule = true, module.exports["default"] = module.exports;
-  } else {
-    module.exports = _construct = function _construct(Parent, args, Class) {
-      var a = [null];
-      a.push.apply(a, args);
-      var Constructor = Function.bind.apply(Parent, a);
-      var instance = new Constructor();
-      if (Class) setPrototypeOf(instance, Class.prototype);
-      return instance;
-    }, module.exports.__esModule = true, module.exports["default"] = module.exports;
-  }
-  return _construct.apply(null, arguments);
+function _construct(t, e, r) {
+  if (isNativeReflectConstruct()) return Reflect.construct.apply(null, arguments);
+  var o = [null];
+  o.push.apply(o, e);
+  var p = new (t.bind.apply(t, o))();
+  return r && setPrototypeOf(p, r.prototype), p;
 }
 module.exports = _construct, module.exports.__esModule = true, module.exports["default"] = module.exports;
 
@@ -28056,30 +28005,6 @@ function _createForOfIteratorHelper(o, allowArrayLike) {
   };
 }
 module.exports = _createForOfIteratorHelper, module.exports.__esModule = true, module.exports["default"] = module.exports;
-
-/***/ }),
-
-/***/ 6389:
-/***/ ((module, __unused_webpack_exports, __webpack_require__) => {
-
-var getPrototypeOf = __webpack_require__(3808);
-var isNativeReflectConstruct = __webpack_require__(9617);
-var possibleConstructorReturn = __webpack_require__(4993);
-function _createSuper(Derived) {
-  var hasNativeReflectConstruct = isNativeReflectConstruct();
-  return function _createSuperInternal() {
-    var Super = getPrototypeOf(Derived),
-      result;
-    if (hasNativeReflectConstruct) {
-      var NewTarget = getPrototypeOf(this).constructor;
-      result = Reflect.construct(Super, arguments, NewTarget);
-    } else {
-      result = Super.apply(this, arguments);
-    }
-    return possibleConstructorReturn(this, result);
-  };
-}
-module.exports = _createSuper, module.exports.__esModule = true, module.exports["default"] = module.exports;
 
 /***/ }),
 
@@ -28184,15 +28109,12 @@ module.exports = _isNativeFunction, module.exports.__esModule = true, module.exp
 /***/ ((module) => {
 
 function _isNativeReflectConstruct() {
-  if (typeof Reflect === "undefined" || !Reflect.construct) return false;
-  if (Reflect.construct.sham) return false;
-  if (typeof Proxy === "function") return true;
   try {
-    Boolean.prototype.valueOf.call(Reflect.construct(Boolean, [], function () {}));
-    return true;
-  } catch (e) {
-    return false;
-  }
+    var t = !Boolean.prototype.valueOf.call(Reflect.construct(Boolean, [], function () {}));
+  } catch (t) {}
+  return (module.exports = _isNativeReflectConstruct = function _isNativeReflectConstruct() {
+    return !!t;
+  }, module.exports.__esModule = true, module.exports["default"] = module.exports)();
 }
 module.exports = _isNativeReflectConstruct, module.exports.__esModule = true, module.exports["default"] = module.exports;
 
@@ -28735,17 +28657,17 @@ module.exports = _toConsumableArray, module.exports.__esModule = true, module.ex
 /***/ ((module, __unused_webpack_exports, __webpack_require__) => {
 
 var _typeof = (__webpack_require__(8698)["default"]);
-function _toPrimitive(input, hint) {
-  if (_typeof(input) !== "object" || input === null) return input;
-  var prim = input[Symbol.toPrimitive];
-  if (prim !== undefined) {
-    var res = prim.call(input, hint || "default");
-    if (_typeof(res) !== "object") return res;
+function toPrimitive(t, r) {
+  if ("object" != _typeof(t) || !t) return t;
+  var e = t[Symbol.toPrimitive];
+  if (void 0 !== e) {
+    var i = e.call(t, r || "default");
+    if ("object" != _typeof(i)) return i;
     throw new TypeError("@@toPrimitive must return a primitive value.");
   }
-  return (hint === "string" ? String : Number)(input);
+  return ("string" === r ? String : Number)(t);
 }
-module.exports = _toPrimitive, module.exports.__esModule = true, module.exports["default"] = module.exports;
+module.exports = toPrimitive, module.exports.__esModule = true, module.exports["default"] = module.exports;
 
 /***/ }),
 
@@ -28754,11 +28676,11 @@ module.exports = _toPrimitive, module.exports.__esModule = true, module.exports[
 
 var _typeof = (__webpack_require__(8698)["default"]);
 var toPrimitive = __webpack_require__(5036);
-function _toPropertyKey(arg) {
-  var key = toPrimitive(arg, "string");
-  return _typeof(key) === "symbol" ? key : String(key);
+function toPropertyKey(t) {
+  var i = toPrimitive(t, "string");
+  return "symbol" == _typeof(i) ? i : String(i);
 }
-module.exports = _toPropertyKey, module.exports.__esModule = true, module.exports["default"] = module.exports;
+module.exports = toPropertyKey, module.exports.__esModule = true, module.exports["default"] = module.exports;
 
 /***/ }),
 
@@ -31264,27 +31186,27 @@ function _regeneratorRuntime() {
 }
 ;// CONCATENATED MODULE: ./node_modules/@babel/runtime/helpers/esm/toPrimitive.js
 
-function _toPrimitive(input, hint) {
-  if (_typeof(input) !== "object" || input === null) return input;
-  var prim = input[Symbol.toPrimitive];
-  if (prim !== undefined) {
-    var res = prim.call(input, hint || "default");
-    if (_typeof(res) !== "object") return res;
+function toPrimitive(t, r) {
+  if ("object" != _typeof(t) || !t) return t;
+  var e = t[Symbol.toPrimitive];
+  if (void 0 !== e) {
+    var i = e.call(t, r || "default");
+    if ("object" != _typeof(i)) return i;
     throw new TypeError("@@toPrimitive must return a primitive value.");
   }
-  return (hint === "string" ? String : Number)(input);
+  return ("string" === r ? String : Number)(t);
 }
 ;// CONCATENATED MODULE: ./node_modules/@babel/runtime/helpers/esm/toPropertyKey.js
 
 
-function _toPropertyKey(arg) {
-  var key = _toPrimitive(arg, "string");
-  return _typeof(key) === "symbol" ? key : String(key);
+function toPropertyKey(t) {
+  var i = toPrimitive(t, "string");
+  return "symbol" == _typeof(i) ? i : String(i);
 }
 ;// CONCATENATED MODULE: ./node_modules/@babel/runtime/helpers/esm/defineProperty.js
 
 function _defineProperty(obj, key, value) {
-  key = _toPropertyKey(key);
+  key = toPropertyKey(key);
   if (key in obj) {
     Object.defineProperty(obj, key, {
       value: value,
