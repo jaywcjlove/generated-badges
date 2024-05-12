@@ -7,7 +7,7 @@
     "generated-badges-cli": "./lib/bin.js"
   },
   "scripts": {
-    "prepare": "husky install && npm run package",
+    "prepare": "husky && npm run package",
     "package": "ncc build src/index.ts -o dist",
     "start": "node lib/index.js",
     "watch": "tsbb watch",
@@ -40,8 +40,8 @@
   "devDependencies": {
     "@actions/core": "^1.10.0",
     "@kkt/ncc": "^1.0.15",
-    "husky": "^8.0.3",
-    "lint-staged": "^14.0.0",
-    "tsbb": "^4.1.3"
+    "husky": "^9.0.11",
+    "lint-staged": "^15.2.2",
+    "tsbb": "^4.2.5"
   }
 }
