@@ -4709,7 +4709,6 @@ var Agent = /*#__PURE__*/function (_DispatcherBase) {
       connect = _ref.connect,
       options = _objectWithoutProperties(_ref, _excluded);
     _classCallCheck(this, Agent);
-    _this = _callSuper(this, Agent);
     if (typeof factory !== 'function') {
       throw new InvalidArgumentError('factory must be a function.');
     }
@@ -4719,6 +4718,7 @@ var Agent = /*#__PURE__*/function (_DispatcherBase) {
     if (!Number.isInteger(maxRedirections) || maxRedirections < 0) {
       throw new InvalidArgumentError('maxRedirections must be a positive number');
     }
+    _this = _callSuper(this, Agent, [options]);
     if (connect && typeof connect !== 'function') {
       connect = _objectSpread({}, connect);
     }
@@ -7328,9 +7328,12 @@ var Client = /*#__PURE__*/function (_DispatcherBase) {
       autoSelectFamily = _ref2.autoSelectFamily,
       autoSelectFamilyAttemptTimeout = _ref2.autoSelectFamilyAttemptTimeout,
       maxConcurrentStreams = _ref2.maxConcurrentStreams,
-      allowH2 = _ref2.allowH2;
+      allowH2 = _ref2.allowH2,
+      webSocket = _ref2.webSocket;
     _classCallCheck(this, Client);
-    _this = _callSuper(this, Client);
+    _this = _callSuper(this, Client, [{
+      webSocket: webSocket
+    }]);
     if (keepAlive !== undefined) {
       throw new InvalidArgumentError('unsupported keepAlive, use pipelining=0 instead');
     }
@@ -7879,8 +7882,10 @@ var _require2 = __webpack_require__(6771),
 var kOnDestroyed = Symbol('onDestroyed');
 var kOnClosed = Symbol('onClosed');
 var kInterceptedDispatch = Symbol('Intercepted Dispatch');
+var kWebSocketOptions = Symbol('webSocketOptions');
 var DispatcherBase = /*#__PURE__*/function (_Dispatcher) {
-  function DispatcherBase() {
+  function DispatcherBase(opts) {
+    var _opts$webSocket;
     var _this;
     _classCallCheck(this, DispatcherBase);
     _this = _callSuper(this, DispatcherBase);
@@ -7888,10 +7893,19 @@ var DispatcherBase = /*#__PURE__*/function (_Dispatcher) {
     _this[kOnDestroyed] = null;
     _this[kClosed] = false;
     _this[kOnClosed] = [];
+    _this[kWebSocketOptions] = (_opts$webSocket = opts === null || opts === void 0 ? void 0 : opts.webSocket) !== null && _opts$webSocket !== void 0 ? _opts$webSocket : {};
     return _this;
   }
   _inherits(DispatcherBase, _Dispatcher);
   return _createClass(DispatcherBase, [{
+    key: "webSocketOptions",
+    get: function get() {
+      var _this$kWebSocketOptio;
+      return {
+        maxPayloadSize: (_this$kWebSocketOptio = this[kWebSocketOptions].maxPayloadSize) !== null && _this$kWebSocketOptio !== void 0 ? _this$kWebSocketOptio : 128 * 1024 * 1024
+      };
+    }
+  }, {
     key: "destroyed",
     get: function get() {
       return this[kDestroyed];
@@ -8582,10 +8596,10 @@ var kAddClient = Symbol('add client');
 var kRemoveClient = Symbol('remove client');
 var kStats = Symbol('stats');
 var PoolBase = /*#__PURE__*/function (_DispatcherBase) {
-  function PoolBase() {
+  function PoolBase(opts) {
     var _this;
     _classCallCheck(this, PoolBase);
-    _this = _callSuper(this, PoolBase);
+    _this = _callSuper(this, PoolBase, [opts]);
     _this[kQueue] = new FixedQueue();
     _this[kClients] = [];
     _this[kQueued] = 0;
@@ -8939,7 +8953,6 @@ var Pool = /*#__PURE__*/function (_PoolBase) {
       allowH2 = _ref.allowH2,
       options = _objectWithoutProperties(_ref, _excluded);
     _classCallCheck(this, Pool);
-    _this = _callSuper(this, Pool);
     if (connections != null && (!Number.isFinite(connections) || connections < 0)) {
       throw new InvalidArgumentError('invalid connections');
     }
@@ -8960,6 +8973,7 @@ var Pool = /*#__PURE__*/function (_PoolBase) {
         autoSelectFamilyAttemptTimeout: autoSelectFamilyAttemptTimeout
       } : undefined), connect));
     }
+    _this = _callSuper(this, Pool, [options]);
     _this[kInterceptors] = (_options$interceptors = options.interceptors) !== null && _options$interceptors !== void 0 && _options$interceptors.Pool && Array.isArray(options.interceptors.Pool) ? options.interceptors.Pool : [];
     _this[kConnections] = connections || null;
     _this[kUrl] = util.parseOrigin(origin);
@@ -27977,29 +27991,30 @@ var _require3 = __webpack_require__(3515),
 var tail = Buffer.from([0x00, 0x00, 0xff, 0xff]);
 var kBuffer = Symbol('kBuffer');
 var kLength = Symbol('kLength');
-
-// Default maximum decompressed message size: 4 MB
-var kDefaultMaxDecompressedSize = 4 * 1024 * 1024;
 var _inflate = /*#__PURE__*/new WeakMap();
 var _options = /*#__PURE__*/new WeakMap();
-var _aborted = /*#__PURE__*/new WeakMap();
-var _currentCallback = /*#__PURE__*/new WeakMap();
+var _maxPayloadSize = /*#__PURE__*/new WeakMap();
 var PerMessageDeflate = /*#__PURE__*/function () {
   /**
    * @param {Map<string, string>} extensions
    */
-  function PerMessageDeflate(extensions) {
+  function PerMessageDeflate(extensions, options) {
     _classCallCheck(this, PerMessageDeflate);
     /** @type {import('node:zlib').InflateRaw} */
     _classPrivateFieldInitSpec(this, _inflate, void 0);
     _classPrivateFieldInitSpec(this, _options, {});
-    /** @type {boolean} */
-    _classPrivateFieldInitSpec(this, _aborted, false);
-    /** @type {Function|null} */
-    _classPrivateFieldInitSpec(this, _currentCallback, null);
+    _classPrivateFieldInitSpec(this, _maxPayloadSize, 0);
     _classPrivateFieldGet(_options, this).serverNoContextTakeover = extensions.has('server_no_context_takeover');
     _classPrivateFieldGet(_options, this).serverMaxWindowBits = extensions.get('server_max_window_bits');
+    _classPrivateFieldSet(_maxPayloadSize, this, options.maxPayloadSize);
   }
+
+  /**
+   * Decompress a compressed payload.
+   * @param {Buffer} chunk Compressed data
+   * @param {boolean} fin Final fragment flag
+   * @param {Function} callback Callback function
+   */
   return _createClass(PerMessageDeflate, [{
     key: "decompress",
     value: function decompress(chunk, fin, callback) {
@@ -28008,11 +28023,6 @@ var PerMessageDeflate = /*#__PURE__*/function () {
       // 1.  Append 4 octets of 0x00 0x00 0xff 0xff to the tail end of the
       //     payload of the message.
       // 2.  Decompress the resulting data using DEFLATE.
-
-      if (_classPrivateFieldGet(_aborted, this)) {
-        callback(new MessageSizeExceededError());
-        return;
-      }
       if (!_classPrivateFieldGet(_inflate, this)) {
         var windowBits = Z_DEFAULT_WINDOWBITS;
         if (_classPrivateFieldGet(_options, this).serverMaxWindowBits) {
@@ -28034,20 +28044,11 @@ var PerMessageDeflate = /*#__PURE__*/function () {
         _classPrivateFieldGet(_inflate, this)[kBuffer] = [];
         _classPrivateFieldGet(_inflate, this)[kLength] = 0;
         _classPrivateFieldGet(_inflate, this).on('data', function (data) {
-          if (_classPrivateFieldGet(_aborted, _this)) {
-            return;
-          }
           _classPrivateFieldGet(_inflate, _this)[kLength] += data.length;
-          if (_classPrivateFieldGet(_inflate, _this)[kLength] > kDefaultMaxDecompressedSize) {
-            _classPrivateFieldSet(_aborted, _this, true);
+          if (_classPrivateFieldGet(_maxPayloadSize, _this) > 0 && _classPrivateFieldGet(_inflate, _this)[kLength] > _classPrivateFieldGet(_maxPayloadSize, _this)) {
+            callback(new MessageSizeExceededError());
             _classPrivateFieldGet(_inflate, _this).removeAllListeners();
-            _classPrivateFieldGet(_inflate, _this).destroy();
             _classPrivateFieldSet(_inflate, _this, null);
-            if (_classPrivateFieldGet(_currentCallback, _this)) {
-              var cb = _classPrivateFieldGet(_currentCallback, _this);
-              _classPrivateFieldSet(_currentCallback, _this, null);
-              cb(new MessageSizeExceededError());
-            }
             return;
           }
           _classPrivateFieldGet(_inflate, _this)[kBuffer].push(data);
@@ -28057,19 +28058,17 @@ var PerMessageDeflate = /*#__PURE__*/function () {
           callback(err);
         });
       }
-      _classPrivateFieldSet(_currentCallback, this, callback);
       _classPrivateFieldGet(_inflate, this).write(chunk);
       if (fin) {
         _classPrivateFieldGet(_inflate, this).write(tail);
       }
       _classPrivateFieldGet(_inflate, this).flush(function () {
-        if (_classPrivateFieldGet(_aborted, _this) || !_classPrivateFieldGet(_inflate, _this)) {
+        if (!_classPrivateFieldGet(_inflate, _this)) {
           return;
         }
         var full = Buffer.concat(_classPrivateFieldGet(_inflate, _this)[kBuffer], _classPrivateFieldGet(_inflate, _this)[kLength]);
         _classPrivateFieldGet(_inflate, _this)[kBuffer].length = 0;
         _classPrivateFieldGet(_inflate, _this)[kLength] = 0;
-        _classPrivateFieldSet(_currentCallback, _this, null);
         callback(null, full);
       });
     }
@@ -28091,7 +28090,9 @@ var _classCallCheck = (__webpack_require__(7383)["default"]);
 var _createClass = (__webpack_require__(4579)["default"]);
 var _callSuper = (__webpack_require__(8336)["default"]);
 var _inherits = (__webpack_require__(9511)["default"]);
+var _classPrivateMethodInitSpec = (__webpack_require__(3312)["default"]);
 var _classPrivateFieldInitSpec = (__webpack_require__(2459)["default"]);
+var _assertClassBrand = (__webpack_require__(1756)["default"]);
 var _classPrivateFieldGet = (__webpack_require__(6668)["default"]);
 var _classPrivateFieldSet = (__webpack_require__(7088)["default"]);
 var _require = __webpack_require__(7075),
@@ -28125,28 +28126,38 @@ var _require7 = __webpack_require__(8105),
   closeWebSocketConnection = _require7.closeWebSocketConnection;
 var _require8 = __webpack_require__(5109),
   PerMessageDeflate = _require8.PerMessageDeflate;
+var _require9 = __webpack_require__(3515),
+  MessageSizeExceededError = _require9.MessageSizeExceededError;
 
 // This code was influenced by ws released under the MIT license.
 // Copyright (c) 2011 Einar Otto Stangvik <einaros@gmail.com>
 // Copyright (c) 2013 Arnout Kazemier and contributors
 // Copyright (c) 2016 Luigi Pinca and contributors
 var _buffers = /*#__PURE__*/new WeakMap();
+var _fragmentsBytes = /*#__PURE__*/new WeakMap();
 var _byteOffset = /*#__PURE__*/new WeakMap();
 var _loop = /*#__PURE__*/new WeakMap();
 var _state = /*#__PURE__*/new WeakMap();
 var _info = /*#__PURE__*/new WeakMap();
 var _fragments = /*#__PURE__*/new WeakMap();
 var _extensions = /*#__PURE__*/new WeakMap();
+var _maxPayloadSize = /*#__PURE__*/new WeakMap();
+var _ByteParser_brand = /*#__PURE__*/new WeakSet();
 var ByteParser = /*#__PURE__*/function (_Writable) {
   /**
    * @param {import('./websocket').WebSocket} ws
    * @param {Map<string, string>|null} extensions
+   * @param {{ maxPayloadSize?: number }} [options]
    */
   function ByteParser(ws, extensions) {
+    var _options$maxPayloadSi;
     var _this;
+    var options = arguments.length > 2 && arguments[2] !== undefined ? arguments[2] : {};
     _classCallCheck(this, ByteParser);
     _this = _callSuper(this, ByteParser);
+    _classPrivateMethodInitSpec(_this, _ByteParser_brand);
     _classPrivateFieldInitSpec(_this, _buffers, []);
+    _classPrivateFieldInitSpec(_this, _fragmentsBytes, 0);
     _classPrivateFieldInitSpec(_this, _byteOffset, 0);
     _classPrivateFieldInitSpec(_this, _loop, false);
     _classPrivateFieldInitSpec(_this, _state, parserStates.INFO);
@@ -28154,10 +28165,13 @@ var ByteParser = /*#__PURE__*/function (_Writable) {
     _classPrivateFieldInitSpec(_this, _fragments, []);
     /** @type {Map<string, PerMessageDeflate>} */
     _classPrivateFieldInitSpec(_this, _extensions, void 0);
+    /** @type {number} */
+    _classPrivateFieldInitSpec(_this, _maxPayloadSize, void 0);
     _this.ws = ws;
     _classPrivateFieldSet(_extensions, _this, extensions == null ? new Map() : extensions);
+    _classPrivateFieldSet(_maxPayloadSize, _this, (_options$maxPayloadSi = options.maxPayloadSize) !== null && _options$maxPayloadSi !== void 0 ? _options$maxPayloadSi : 0);
     if (_classPrivateFieldGet(_extensions, _this).has('permessage-deflate')) {
-      _classPrivateFieldGet(_extensions, _this).set('permessage-deflate', new PerMessageDeflate(extensions));
+      _classPrivateFieldGet(_extensions, _this).set('permessage-deflate', new PerMessageDeflate(extensions, options));
     }
     return _this;
   }
@@ -28175,15 +28189,15 @@ var ByteParser = /*#__PURE__*/function (_Writable) {
       _classPrivateFieldSet(_loop, this, true);
       this.run(callback);
     }
-
+  }, {
+    key: "run",
+    value:
     /**
      * Runs whenever a new chunk is received.
      * Callback is called whenever there are no more chunks buffering,
      * or not enough bytes are buffered to parse.
      */
-  }, {
-    key: "run",
-    value: function run(callback) {
+    function run(callback) {
       var _this2 = this;
       while (_classPrivateFieldGet(_loop, this)) {
         if (_classPrivateFieldGet(_state, this) === parserStates.INFO) {
@@ -28257,6 +28271,9 @@ var ByteParser = /*#__PURE__*/function (_Writable) {
           if (payloadLength <= 125) {
             _classPrivateFieldGet(_info, this).payloadLength = payloadLength;
             _classPrivateFieldSet(_state, this, parserStates.READ_DATA);
+            if (!_assertClassBrand(_ByteParser_brand, this, _validatePayloadLength).call(this)) {
+              return;
+            }
           } else if (payloadLength === 126) {
             _classPrivateFieldSet(_state, this, parserStates.PAYLOADLENGTH_16);
           } else if (payloadLength === 127) {
@@ -28277,6 +28294,9 @@ var ByteParser = /*#__PURE__*/function (_Writable) {
           var _buffer = this.consume(2);
           _classPrivateFieldGet(_info, this).payloadLength = _buffer.readUInt16BE(0);
           _classPrivateFieldSet(_state, this, parserStates.READ_DATA);
+          if (!_assertClassBrand(_ByteParser_brand, this, _validatePayloadLength).call(this)) {
+            return;
+          }
         } else if (_classPrivateFieldGet(_state, this) === parserStates.PAYLOADLENGTH_64) {
           if (_classPrivateFieldGet(_byteOffset, this) < 8) {
             return callback();
@@ -28297,6 +28317,9 @@ var ByteParser = /*#__PURE__*/function (_Writable) {
           }
           _classPrivateFieldGet(_info, this).payloadLength = lower;
           _classPrivateFieldSet(_state, this, parserStates.READ_DATA);
+          if (!_assertClassBrand(_ByteParser_brand, this, _validatePayloadLength).call(this)) {
+            return;
+          }
         } else if (_classPrivateFieldGet(_state, this) === parserStates.READ_DATA) {
           if (_classPrivateFieldGet(_byteOffset, this) < _classPrivateFieldGet(_info, this).payloadLength) {
             return callback();
@@ -28307,16 +28330,18 @@ var ByteParser = /*#__PURE__*/function (_Writable) {
             _classPrivateFieldSet(_state, this, parserStates.INFO);
           } else {
             if (!_classPrivateFieldGet(_info, this).compressed) {
-              _classPrivateFieldGet(_fragments, this).push(body);
+              this.writeFragments(body);
+              if (_classPrivateFieldGet(_maxPayloadSize, this) > 0 && _classPrivateFieldGet(_fragmentsBytes, this) > _classPrivateFieldGet(_maxPayloadSize, this)) {
+                failWebsocketConnection(this.ws, new MessageSizeExceededError().message);
+                return;
+              }
 
               // If the frame is not fragmented, a message has been received.
               // If the frame is fragmented, it will terminate with a fin bit set
               // and an opcode of 0 (continuation), therefore we handle that when
               // parsing continuation frames, not here.
               if (!_classPrivateFieldGet(_info, this).fragmented && _classPrivateFieldGet(_info, this).fin) {
-                var fullMessage = Buffer.concat(_classPrivateFieldGet(_fragments, this));
-                websocketMessageReceived(this.ws, _classPrivateFieldGet(_info, this).binaryType, fullMessage);
-                _classPrivateFieldGet(_fragments, this).length = 0;
+                websocketMessageReceived(this.ws, _classPrivateFieldGet(_info, this).binaryType, this.consumeFragments());
               }
               _classPrivateFieldSet(_state, this, parserStates.INFO);
             } else {
@@ -28325,17 +28350,20 @@ var ByteParser = /*#__PURE__*/function (_Writable) {
                   failWebsocketConnection(_this2.ws, error.message);
                   return;
                 }
-                _classPrivateFieldGet(_fragments, _this2).push(data);
+                _this2.writeFragments(data);
+                if (_classPrivateFieldGet(_maxPayloadSize, _this2) > 0 && _classPrivateFieldGet(_fragmentsBytes, _this2) > _classPrivateFieldGet(_maxPayloadSize, _this2)) {
+                  failWebsocketConnection(_this2.ws, new MessageSizeExceededError().message);
+                  return;
+                }
                 if (!_classPrivateFieldGet(_info, _this2).fin) {
                   _classPrivateFieldSet(_state, _this2, parserStates.INFO);
                   _classPrivateFieldSet(_loop, _this2, true);
                   _this2.run(callback);
                   return;
                 }
-                websocketMessageReceived(_this2.ws, _classPrivateFieldGet(_info, _this2).binaryType, Buffer.concat(_classPrivateFieldGet(_fragments, _this2)));
+                websocketMessageReceived(_this2.ws, _classPrivateFieldGet(_info, _this2).binaryType, _this2.consumeFragments());
                 _classPrivateFieldSet(_loop, _this2, true);
                 _classPrivateFieldSet(_state, _this2, parserStates.INFO);
-                _classPrivateFieldGet(_fragments, _this2).length = 0;
                 _this2.run(callback);
               });
               _classPrivateFieldSet(_loop, this, false);
@@ -28382,6 +28410,25 @@ var ByteParser = /*#__PURE__*/function (_Writable) {
       }
       _classPrivateFieldSet(_byteOffset, this, _classPrivateFieldGet(_byteOffset, this) - n);
       return buffer;
+    }
+  }, {
+    key: "writeFragments",
+    value: function writeFragments(fragment) {
+      _classPrivateFieldSet(_fragmentsBytes, this, _classPrivateFieldGet(_fragmentsBytes, this) + fragment.length);
+      _classPrivateFieldGet(_fragments, this).push(fragment);
+    }
+  }, {
+    key: "consumeFragments",
+    value: function consumeFragments() {
+      var fragments = _classPrivateFieldGet(_fragments, this);
+      if (fragments.length === 1) {
+        _classPrivateFieldSet(_fragmentsBytes, this, 0);
+        return fragments.shift();
+      }
+      var output = Buffer.concat(fragments, _classPrivateFieldGet(_fragmentsBytes, this));
+      _classPrivateFieldSet(_fragments, this, []);
+      _classPrivateFieldSet(_fragmentsBytes, this, 0);
+      return output;
     }
   }, {
     key: "parseCloseBody",
@@ -28513,6 +28560,13 @@ var ByteParser = /*#__PURE__*/function (_Writable) {
     }
   }]);
 }(Writable);
+function _validatePayloadLength() {
+  if (_classPrivateFieldGet(_maxPayloadSize, this) > 0 && !isControlFrame(_classPrivateFieldGet(_info, this).opcode) && _classPrivateFieldGet(_info, this).payloadLength > _classPrivateFieldGet(_maxPayloadSize, this)) {
+    failWebsocketConnection(this.ws, 'Payload size exceeds maximum allowed size');
+    return false;
+  }
+  return true;
+}
 module.exports = {
   ByteParser: ByteParser
 };
@@ -29478,10 +29532,14 @@ var WebSocket = /*#__PURE__*/function (_EventTarget) {
   }]);
 }(/*#__PURE__*/_wrapNativeSuper(EventTarget)); // https://websockets.spec.whatwg.org/#dom-websocket-connecting
 function _onConnectionEstablished(response, parsedExtensions) {
+  var _this$kController;
   // processResponse is called when the "response's header list has been received and initialized."
   // once this happens, the connection is open
   this[kResponse] = response;
-  var parser = new ByteParser(this, parsedExtensions);
+  var maxPayloadSize = (_this$kController = this[kController]) === null || _this$kController === void 0 || (_this$kController = _this$kController.dispatcher) === null || _this$kController === void 0 || (_this$kController = _this$kController.webSocketOptions) === null || _this$kController === void 0 ? void 0 : _this$kController.maxPayloadSize;
+  var parser = new ByteParser(this, parsedExtensions, {
+    maxPayloadSize: maxPayloadSize
+  });
   parser.on('drain', onParserDrain);
   parser.on('error', onParserError.bind(this));
   response.socket.ws = this;
